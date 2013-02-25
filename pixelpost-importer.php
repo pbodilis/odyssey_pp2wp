@@ -30,7 +30,7 @@ jQuery(document).on('click', '#pp2wp_post_importation_stop', function(e) {
 function pp2wpDoMigrate(i) {
     if (pp2wp.stop) return;
     if (typeof(pp2wp.ppPostIds[i]) == 'undefined') {
-        jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" aborted!');
+        jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" (index "' + i + '") aborted!');
         return;
     }
     var ajaxArgs = {
@@ -43,10 +43,10 @@ function pp2wpDoMigrate(i) {
         data:     ajaxArgs
     }).done(function(r) {
         if (r) {
-            jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" could not be imported');
+            jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" (index "' + i + '")  successfully imported');
+            setTimeout('pp2wpDoMigrate(' + (i + 1) + ')', 50);
         } else {
-            jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" successfully imported');
-            pp2wpDoMigrate(i + 1);
+            jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" (index "' + i + '")  could not be imported');
         }
     });
 }
