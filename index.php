@@ -1,4 +1,13 @@
 <?php
+/*
+This redirection tool is to be used once the pixelpost importer for wordpress has been used.
+It uses options left in wp DB to do the magic.
+Author: Pierre Bodilis
+Author URI: http://rataki.eu/
+Version: 0.1
+Text Domain: pixelpost-importer
+License: GPL version 2 or later - http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+*/
 
 if ( !isset($wp_did_header) ) {
 
@@ -9,17 +18,16 @@ if ( !isset($wp_did_header) ) {
     wp();
 }
 
-$redirection = get_option('ppposts2wpposts');
+$pp_posts2wp_posts = get_option('pp_cats2wp_cats');
 
-if (isset($_GET['showimage'])) {
-    $ppPostId = intval($_GET['showimage']);
-    $wpPostId = isset($redirection[$ppPostId]) ? $redirection[$ppPostId] : null;
+$wp_post_id = null;
 
-    header("Status: 301 Moved Permanently", false, 301);
-    header("Location: " . get_permalink($wpPostId));
-    exit();
+if ( isset( $_GET['showimage'] ) ) {
+    $pp_post_id = intval( $_GET['showimage'] );
+    $wp_post_id = isset( $redirection[ $pp_post_id ] ) ? $redirection[ $pp_post_id ] : null;
 }
-var_dump($_GET['showimage']);
 
-echo "porut\n";
+header( "Status: 301 Moved Permanently", false, 301);
+header( "Location: " . get_permalink( $wp_post_id ) );
+exit();
 

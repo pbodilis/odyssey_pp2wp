@@ -1,8 +1,8 @@
 <?php
 /*
 Plugin Name: Pixelpost Importer
-Plugin URI: http://wordpress.org/extend/plugins/wordpress-importer/
-Description: Import posts, pages, comments, custom fields, categories, tags and more from a Pixelpost export file.
+Plugin URI: http://rataki.eu
+Description: Import posts, comments, and categories from a Pixelpost database.
 Author: Pierre Bodilis
 Author URI: http://rataki.eu/
 Version: 0.1
