@@ -131,20 +131,17 @@ class PP_Import extends WP_Importer {
     const PPIMPORTER_PIXELPOST_RESET   = 'odyssey_pp2wp_pixelpost_importer_reset';
    
     
-    function header() 
-    {
+    function header() {
         echo '<div class="wrap">';
         echo '<div id="icon-tools" class="icon32"><br></div>' . PHP_EOL;
         echo '<h2>'.__('Import Pixelpost').'</h2>';
     }
 
-    function footer() 
-    {
+    function footer() {
         echo '</div>';
     }
 
-    function get_pixelpost_default_settings()
-    {
+    function get_pixelpost_default_settings() {
         $uploads = wp_upload_dir();
         $tmpDir = $uploads['basedir'] . '/odyssey_pp2wp/';
         @mkdir($tmpDir);
@@ -159,17 +156,14 @@ class PP_Import extends WP_Importer {
             'imageSize'    => 'full',
         );
     }
-    function get_pixelpost_settings()
-    {
+    function get_pixelpost_settings() {
         return get_option(self::PPIMPORTER_PIXELPOST_OPTIONS, $this->get_pixelpost_default_settings());
     }
 
-    static function setting2Type($s)
-    {
+    static function setting2Type($s) {
         return ($s == 'dbpass') ? 'password' : 'text';
     }
-    static function setting2Label($s)
-    {
+    static function setting2Label($s) {
          $s2l = array(
             'dbuser'       => __('Pixelpost Database User:'),
             'dbpass'       => __('Pixelpost Database Password:'),
@@ -183,23 +177,22 @@ class PP_Import extends WP_Importer {
         return $s2l[$s];
     }
 
-    function greet() 
-    {
-        if (isset($_POST[self::PPIMPORTER_PIXELPOST_RESET])) {
+    function greet() {
+        if ( isset ( $_POST[self::PPIMPORTER_PIXELPOST_RESET] ) ) {
             delete_option(self::PPIMPORTER_PIXELPOST_OPTIONS);
         }
         $settings = $this->get_pixelpost_settings();
-        if (isset($_POST[self::PPIMPORTER_PIXELPOST_SUBMIT])) {
-            unset($_POST[self::PPIMPORTER_PIXELPOST_SUBMIT]);
-            foreach ($_POST as $name => $setting) {
+        if ( isset ( $_POST[ self::PPIMPORTER_PIXELPOST_SUBMIT ] ) ) {
+            unset ( $_POST[ self::PPIMPORTER_PIXELPOST_SUBMIT ] );
+            foreach ( $_POST as $name => $setting ) {
                 $settings[$name] = $setting;
             }
             update_option(self::PPIMPORTER_PIXELPOST_OPTIONS, $settings);
         }
 
-        echo '<p>'.__('This importer allows you to extract posts from a Pixelpost install into wordpress.').'</p>';
-        echo '<p>'.__('Please note that this improter has been developped for pixelpost 1.7.1 and wordpress 3.5.1. It may not work very well with other versions.').'</p>';
-        echo '<p>'.__('Your Pixelpost configuration settings are as follows:').'</p>';
+        echo '<p>' . __( 'This importer allows you to extract posts from a Pixelpost install into wordpress.' ) . '</p>';
+        echo '<p>' . __( 'Please note that this improter has been developped for pixelpost 1.7.1 and wordpress 3.5.1. It may not work very well with other versions.' ) . '</p>';
+        echo '<p>' . __( 'Your Pixelpost configuration settings are as follows:' ) . '</p>';
 
         echo '<form action="admin.php?import=pixelpost&amp;step=1" method="post">';
         echo '  <table class="form-table">';
@@ -219,14 +212,13 @@ class PP_Import extends WP_Importer {
         echo '    </tbody>';
         echo '  </table>';
         echo '  <p>';
-        echo '    <input type="submit" name="' . self::PPIMPORTER_PIXELPOST_SUBMIT . '"  class="button button-primary" value="' . __('update settings') . '" />';
-        echo '    <input type="submit" name="' . self::PPIMPORTER_PIXELPOST_RESET . '"  class="button button-primary" value="' . __('reset settings') . '" />';
+        echo '    <input type="submit" name="' . self::PPIMPORTER_PIXELPOST_SUBMIT . '"  class="button button-primary" value="' . __( 'update settings' ) . '" />';
+        echo '    <input type="submit" name="' . self::PPIMPORTER_PIXELPOST_RESET  . '"  class="button button-primary" value="' . __( 'reset settings' )  . '" />';
         echo '  </p>';
         echo '</form>';
     }
     
-    function init()
-    {
+    function init() {
         $settings = $this->get_pixelpost_settings();
         $this->ppdb = new wpdb(
             $settings['dbuser'],
@@ -243,26 +235,22 @@ class PP_Import extends WP_Importer {
         $this->imgSize = $settings['imageSize'];
     }
 
-    function get_pp_db()
-    {
+    function get_pp_db() {
         if (!isset($this->ppdb)) $this->init();
         return $this->ppdb;
     }
 
-    function get_pp_config()
-    {
+    function get_pp_config() {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT * FROM {$this->prefix}config", ARRAY_A);
     }
     
-    function get_pp_cats()
-    {
+    function get_pp_cats() {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT id, name FROM {$this->prefix}categories", ARRAY_A);
     }
     
-    function get_pp_postcat($postId)
-    {
+    function get_pp_postcat($postId) {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT cat.name 
                                     FROM {$this->prefix}pixelpost p
@@ -271,8 +259,7 @@ class PP_Import extends WP_Importer {
                                     ARRAY_A);
     }
     
-    function get_pp_postcats($postId)
-    {
+    function get_pp_postcats($postId) {
         $ppdb = $this->get_pp_db();
         $res = $ppdb->get_results("SELECT ca.cat_id
                                    FROM {$this->prefix}catassoc ca
@@ -286,8 +273,7 @@ class PP_Import extends WP_Importer {
         return $ret;
     }
     
-    function get_pp_post_ids()
-    {
+    function get_pp_post_ids() {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT id FROM {$this->prefix}pixelpost
                                     ",
@@ -297,8 +283,7 @@ class PP_Import extends WP_Importer {
     }
 
 
-    function get_pp_posts()
-    {
+    function get_pp_posts() {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT 
                                         id,
@@ -313,8 +298,7 @@ class PP_Import extends WP_Importer {
                                     ARRAY_A);
     }
     
-    function get_pp_post_comment_count($postId)
-    {
+    function get_pp_post_comment_count($postId) {
         $ppdb = $this->get_pp_db();
         $ret = $ppdb->get_results("SELECT count(id) as 'comments_count' FROM {$this->prefix}comments WHERE parent_id = '$postId'", ARRAY_A);
         if (is_array($ret)) {
@@ -324,8 +308,7 @@ class PP_Import extends WP_Importer {
         }
     }
     
-    function get_pp_comment_by_post_id($postId)
-    {
+    function get_pp_comment_by_post_id($postId) {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT
                                         id,
@@ -343,8 +326,7 @@ class PP_Import extends WP_Importer {
                                     ARRAY_A);
     }
 
-    function get_pp_comments()
-    {
+    function get_pp_comments() {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT
                                         id,
@@ -359,8 +341,7 @@ class PP_Import extends WP_Importer {
                                     ARRAY_A);
     }
     
-    function build_category_tree($categories)
-    {
+    function build_category_tree($categories) {
         global $wpdb;
         $tree = array();
         foreach ($categories as $category) {
@@ -387,8 +368,7 @@ class PP_Import extends WP_Importer {
         return $tree;
     }
 
-    function insert_category_tree($ppCatTree, $parentWpCatId = null)
-    {
+    function insert_category_tree($ppCatTree, $parentWpCatId = null) {
         $ppcat2wpcat = array();
         foreach ($ppCatTree as $name => $ppCat) {
             $params = array(
@@ -414,8 +394,7 @@ class PP_Import extends WP_Importer {
         return $ppcat2wpcat;
     }
     
-    function cat2wp($categories) 
-    {
+    function cat2wp($categories) {
         // General Housekeeping
         global $wpdb;
         $count          = 0;
@@ -443,8 +422,7 @@ class PP_Import extends WP_Importer {
         return false;
     }
     
-    function posts2wp($ppPosts)
-    {
+    function posts2wp($ppPosts) {
         global $wpdb;
         
         $ppposts2wpposts = array();
@@ -542,16 +520,14 @@ class PP_Import extends WP_Importer {
         return true;    
     }
         
-    function import_categories() 
-    {
+    function import_categories() {
         // Category Import
         $cats = $this->get_pp_cats();
         $this->cat2wp($cats);
         add_option('pp_cats', $cats);
     }
     
-    function import_posts()
-    {
+    function import_posts() {
         // Post Import
         $posts = $this->get_pp_posts();
         echo '<p>' . sprintf(__('Retrieved %d posts from Pixelpost, importing...'), count($posts)) . '</p>';
@@ -560,27 +536,25 @@ class PP_Import extends WP_Importer {
 
     }
     
-    function cleanup_ppimport()
-    {
+    function cleanup_ppimport() {
         delete_option('pp_cats');
         delete_option('ppcat2wpcat');
         delete_option('ppposts2wpposts');
         delete_option('ppcm2wpcm');
     }
     
-    function dispatch() 
-    {
+    function dispatch() {
         $this->header();
 
-        if (isset($_POST[self::PPIMPORTER_PIXELPOST_SUBMIT]) ||
-            isset($_POST[self::PPIMPORTER_PIXELPOST_RESET])  ||
-            empty($_GET['step'])) {
+        if (isset ( $_POST[ self::PPIMPORTER_PIXELPOST_SUBMIT ] ) ||
+            isset ( $_POST[ self::PPIMPORTER_PIXELPOST_RESET ] )  ||
+            empty ( $_GET['step'] ) ) {
             $step = 0;
         } else {
-            $step = intval($_GET['step']);
+            $step = intval ( $_GET ['step']);
         }
 
-        switch ($step) {
+        switch ( $step ) {
             default:
             case 0 : $this->greet();             break;
             case 1 : $this->import_categories(); break;
@@ -594,7 +568,7 @@ class PP_Import extends WP_Importer {
             2 => __('Finish'),
         );
 
-        if (isset($step2Str[$step])) {
+        if ( isset ( $step2Str[ $step ] ) ) {
             echo '<form action="admin.php?import=pixelpost&amp;step=' . ($step + 1) . '" method="post">';
             echo '  <input type="submit" name="submit" value="' . $step2Str[$step] . '" class="button button-primary" />';
             echo '</form>';
