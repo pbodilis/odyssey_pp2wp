@@ -174,11 +174,6 @@ class PP_Import extends WP_Importer {
         return $this->ppdb;
     }
 
-    function get_pp_config() {
-        $ppdb = $this->get_pp_db();
-        return $ppdb->get_results("SELECT * FROM {$this->prefix}config", ARRAY_A);
-    }
-    
     function get_pp_cats() {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT id, name FROM {$this->prefix}categories", ARRAY_A);
@@ -261,15 +256,7 @@ class PP_Import extends WP_Importer {
     
     function get_pp_comment_by_post_id( $post_id ) {
         $ppdb = $this->get_pp_db();
-        return $ppdb->get_results("SELECT
-                                        id,
-                                        parent_id,
-                                        datetime,
-                                        ip,
-                                        message,
-                                        name,
-                                        url,
-                                        email
+        return $ppdb->get_results("SELECT id, parent_id, datetime, ip, message, name, url, email
                                     FROM {$this->prefix}comments
                                     WHERE parent_id = '$post_id'
                                       AND publish = 'yes'
@@ -279,15 +266,7 @@ class PP_Import extends WP_Importer {
 
     function get_pp_comments() {
         $ppdb = $this->get_pp_db();
-        return $ppdb->get_results("SELECT
-                                        id,
-                                        parent_id,
-                                        datetime,
-                                        ip,
-                                        message,
-                                        name,
-                                        url,
-                                        email
+        return $ppdb->get_results("SELECT id, parent_id, datetime, ip, message, name, url, email
                                     FROM {$this->prefix}comments",
                                     ARRAY_A);
     }
