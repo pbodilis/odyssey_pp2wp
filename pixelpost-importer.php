@@ -14,7 +14,7 @@ License: GPL version 2 or later - http://www.gnu.org/licenses/old-licenses/gpl-2
 // add_action('admin_print_scripts', 'my_action_javascript');
 function js_getPPPosts() {
 ?>
-<div id="pp2wp_post_importation_log"></div>
+<div id="pp2wp_post_importation_log">Starting...</div>
 <p>
     <input id="pp2wp_post_importation_stop"   type="submit" name="stop importing"   value="stop importing"   class="button button-primary"/>
     <input id="pp2wp_post_importation_resume" type="submit" name="resume importing" value="resume importing" class="button button-primary"/>
@@ -22,11 +22,11 @@ function js_getPPPosts() {
 
 <script type="text/javascript" >
 var pp2wp_current = 0;
+var pp2wp_total = 0;
 var pp2wp = {
     stop: false,
     doMigration: function() {
         if (pp2wp.stop) return;
-//         this.current += 1:
         var pp_post_id = pp2wp.pp_post_ids[pp2wp_current];
         if (typeof(pp_post_id) == 'undefined') {
             jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + pp_post_id + '" (index "' + pp2wp_current + '") aborted!');
@@ -44,11 +44,11 @@ var pp2wp = {
             if (r) {
                 pp2wp_current++;
                 jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + pp_post_id +
-                    '" (index "' + pp2wp_current + '")  successfully imported');
+                    '" (index "' + pp2wp_current + '/' + pp2wp_total + '")  successfully imported');
                 setTimeout('pp2wp.doMigration()', 50);
             } else {
                 jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + pp_post_id +
-                    '" (index "' + pp2wp_current + '")  could not be imported');
+                    '" (index "' + pp2wp_current + '/' + pp2wp_total +'")  could not be imported');
             }
         });
     }
@@ -77,6 +77,7 @@ jQuery(document).ready(function($) {
         data:     ajaxArgs,
     }).done(function(pp) {
         pp2wp.pp_post_ids = pp;
+        pp2wp_total = pp.length;
         pp2wp.doMigration();
     });
 });
@@ -85,18 +86,14 @@ jQuery(document).ready(function($) {
 }
 
 function pp2wp_get_pp_post_ids_callback() {
-    $ret = array();
-    $ppIds = $GLOBALS['pp_import']->get_pp_post_ids();
-    foreach($ppIds as $ppId) {
-        $ret[] = $ppId['id'];
-    }
-    
-    echo json_encode(array_values($ret));
+    echo json_encode($GLOBALS['pp_import']->get_pp_post_ids());
     die();
 }
 add_action('wp_ajax_pp2wp_get_pp_post_ids', 'pp2wp_get_pp_post_ids_callback');
 
 function  pp2wp_import_pp_post_to_wp_callback() {
+    $pp_post_id = $_REQUEST['pp_post_id'];
+    $GLOBALS['pp_import']->pp_post2wp_post($pp_post_id);
     echo json_encode(true);
     die();
 }
@@ -250,21 +247,21 @@ class PP_Import extends WP_Importer {
         return $ppdb->get_results("SELECT id, name FROM {$this->prefix}categories", ARRAY_A);
     }
     
-    function get_pp_postcat( $postId ) {
+    function get_pp_postcat( $post_id ) {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT cat.name 
                                     FROM {$this->prefix}pixelpost p
                                         INNER JOIN {$this->prefix}categories cat ON cat.id = p.category
-                                    WHERE p.id = $postId",
+                                    WHERE p.id = $post_id",
                                     ARRAY_A);
     }
     
-    function get_pp_postcats( $postId ) {
+    function get_pp_postcats( $post_id ) {
         $ppdb = $this->get_pp_db();
         $res = $ppdb->get_results("SELECT ca.cat_id
                                    FROM {$this->prefix}catassoc ca
                                     INNER JOIN {$this->prefix}categories c ON c.id = ca.cat_id
-                                   WHERE ca.image_id = $postId", 
+                                   WHERE ca.image_id = $post_id",
                                  ARRAY_A);
         $ret = array();
         foreach ($res as $r) {
@@ -275,17 +272,48 @@ class PP_Import extends WP_Importer {
     
     function get_pp_post_ids() {
         $ppdb = $this->get_pp_db();
-        return $ppdb->get_results("SELECT id FROM {$this->prefix}pixelpost
+        $pp_ids = $ppdb->get_results("SELECT id FROM {$this->prefix}pixelpost", ARRAY_A);
+        $ret = array();
+        foreach($pp_ids as $pp_id) {
+            $ret[] = $pp_id['id'];
+        }
+        return $ret;
+    }
+
+    function get_pp_post_count() {
+        $ppdb = $this->get_pp_db();
+        $ret = $ppdb->get_results("SELECT count(id) as 'post_count' FROM {$this->prefix}pixelpost", ARRAY_A);
+        if (is_array($ret)) {
+            return $ret[0]['post_count'];
+        } else {
+            return 0;
+        }
+    }
+
+    function get_pp_post_by_post_id($post_id) {
+        $ppdb = $this->get_pp_db();
+        $ret = $ppdb->get_results("SELECT
+                                        id,
+                                        datetime,
+                                        headline,
+                                        body,
+                                        image
+                                    FROM {$this->prefix}pixelpost
+                                    WHERE id = '$post_id'
                                     ",
 //                                     WHERE id=16
 //                                     WHERE id=17
                                     ARRAY_A);
+        if (is_array($ret)) {
+            return $ret[0];
+        } else {
+            return 0;
+        }
     }
-
 
     function get_pp_posts() {
         $ppdb = $this->get_pp_db();
-        return $ppdb->get_results("SELECT 
+        return $ppdb->get_results("SELECT
                                         id,
                                         datetime,
                                         headline,
@@ -298,9 +326,9 @@ class PP_Import extends WP_Importer {
                                     ARRAY_A);
     }
     
-    function get_pp_post_comment_count( $postId ) {
+    function get_pp_post_comment_count( $post_id ) {
         $ppdb = $this->get_pp_db();
-        $ret = $ppdb->get_results("SELECT count(id) as 'comments_count' FROM {$this->prefix}comments WHERE parent_id = '$postId'", ARRAY_A);
+        $ret = $ppdb->get_results("SELECT count(id) as 'comments_count' FROM {$this->prefix}comments WHERE parent_id = '$post_id'", ARRAY_A);
         if (is_array($ret)) {
             return $ret[0]['comments_count'];
         } else {
@@ -308,7 +336,7 @@ class PP_Import extends WP_Importer {
         }
     }
     
-    function get_pp_comment_by_post_id( $postId ) {
+    function get_pp_comment_by_post_id( $post_id ) {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT
                                         id,
@@ -320,7 +348,7 @@ class PP_Import extends WP_Importer {
                                         url,
                                         email
                                     FROM {$this->prefix}comments
-                                    WHERE parent_id = '$postId'
+                                    WHERE parent_id = '$post_id'
                                       AND publish = 'yes'
                                     ORDER BY datetime ASC",
                                     ARRAY_A);
@@ -422,27 +450,24 @@ class PP_Import extends WP_Importer {
         return false;
     }
     
-    function posts2wp($pp_posts) {
+    function pp_post2wp_post($pp_post_id) {
         global $wpdb;
         
-        $ppposts2wpposts = array();
-        $ppcat2wpcat     = get_option('ppcat2wpcat');
-
-        if ( ! is_array($pp_posts)) {
-            return false;
-        }
+//         $ppposts2wpposts = array();
+        $ppcat2wpcat = get_option('ppcat2wpcat');
 
         // Let's assume the logged in user in the author of all imported posts
         $authorid = get_current_user_id();
 
-        echo '<p>' . __('Importing Posts...') . '<br /><br /></p>';
         set_time_limit(0);
-        foreach($pp_posts as $pp_post) {
+//         foreach($pp_posts as $pp_post) {
+            $pp_post = $this->get_pp_post_by_post_id($pp_post_id);
+
             // retrieve this post categories ID
-            $ppCategories = $this->get_pp_postcats($pp_post['id']);
-            $wpCategories = array();
-            foreach ($ppCategories as $ppCategory) {
-                $wpCategories[] = $ppcat2wpcat[$ppCategory];
+            $pp_categories = $this->get_pp_postcats($pp_post['id']);
+            $wp_categories = array();
+            foreach ($pp_categories as $pp_category) {
+                $wp_categories[] = $ppcat2wpcat[$pp_category];
             }
 
             // let's insert the new post
@@ -455,7 +480,7 @@ class PP_Import extends WP_Importer {
                 'post_content'   => '',
                 'post_status'    => 'publish',
                 'post_title'     => utf8_decode($pp_post['headline']),
-                'post_category'  => $wpCategories,
+                'post_category'  => $wp_categories,
             );
             $wp_post_id = wp_insert_post($wp_post_params, true);
 
@@ -466,7 +491,7 @@ class PP_Import extends WP_Importer {
             $response = wp_remote_get($pp_image_url, array('timeout' => 300, 'stream' => true, 'filename' => $pp_image_tmp_file));
             if (is_wp_error($response)) {
                 var_dump($response);
-                unlink($tmpfname);
+                unlink($pp_image_tmp_file);
                 return $response;
             }
             
@@ -510,13 +535,12 @@ class PP_Import extends WP_Importer {
 
             // keep a reference to this post
             $pp_posts2wp_posts[$pp_post['id']] = $wp_post_id;
-        }
+//         }
         set_time_limit(30);
 
         // Store ID translation for later use
-        update_option('pp_posts2wp_posts', $pp_posts2wp_posts);
-        
-        echo '<p>'.sprintf(__('Done! <strong>%1$s</strong> posts imported.'), count($pp_posts2wp_posts)).'<br /><br /></p>';
+        update_option('odyssey_pp_posts2wp_posts_' . $pp_post_id, $wp_post_id);
+
         return true;    
     }
         
@@ -529,8 +553,8 @@ class PP_Import extends WP_Importer {
     
     function import_posts() {
         // Post Import
-        $posts = $this->get_pp_posts();
-        echo '<p>' . sprintf(__('Retrieved %d posts from Pixelpost, importing...'), count($posts)) . '</p>';
+//         $posts = $this->get_pp_posts();
+        echo '<p>' . sprintf(__('Retrieved %d posts from Pixelpost, importing...'), $this->get_pp_post_count()) . '</p>';
         js_getPPPosts();
 //         $this->posts2wp($posts);
 
