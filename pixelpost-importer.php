@@ -10,97 +10,34 @@ Text Domain: pixelpost-importer
 License: GPL version 2 or later - http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 */
 
-
-// add_action('admin_print_scripts', 'my_action_javascript');
-function js_getPPPosts() {
-?>
-<div id="pp2wp_post_importation_log">Starting...</div>
-<p>
-    <input id="pp2wp_post_importation_stop"   type="submit" name="stop importing"   value="stop importing"   class="button button-primary"/>
-    <input id="pp2wp_post_importation_resume" type="submit" name="resume importing" value="resume importing" class="button button-primary"/>
-</p>
-
-<script type="text/javascript" >
-var pp2wp_current = 0;
-var pp2wp_total = 0;
-var pp2wp = {
-    stop: false,
-    doMigration: function() {
-        if (pp2wp.stop) return;
-        var pp_post_id = pp2wp.pp_post_ids[pp2wp_current];
-        if (typeof(pp_post_id) == 'undefined') {
-            jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + pp_post_id + '" (index "' + pp2wp_current + '") aborted!');
-            return;
-        }
-        var ajaxArgs = {
-            action:     'pp2wp_import_pp_post_to_wp',
-            pp_post_id: pp_post_id
-        }
-        jQuery.ajax({
-            url:      ajaxurl,
-            dataType: 'json',
-            data:     ajaxArgs
-        }).done(function(r) {
-            if (r) {
-                pp2wp_current++;
-                jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + pp_post_id +
-                    '" (index "' + pp2wp_current + '/' + pp2wp_total + '")  successfully imported');
-                setTimeout('pp2wp.doMigration()', 50);
-            } else {
-                jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + pp_post_id +
-                    '" (index "' + pp2wp_current + '/' + pp2wp_total +'")  could not be imported');
-            }
-        });
-    }
-};
-
-
-jQuery(document).on('click', '#pp2wp_post_importation_stop', function(e) {
-    pp2wp.stop = true;
-    e.preventDefault();
-    return false;
-});
-jQuery(document).on('click', '#pp2wp_post_importation_resume', function(e) {
-    pp2wp.stop = false;
-    pp2wp.doMigration();
-    e.preventDefault();
-    return false;
-});
-
-jQuery(document).ready(function($) {
-    var ajaxArgs = {
-        action:   'pp2wp_get_pp_post_ids'
-    }
-    jQuery.ajax({
-        url:      ajaxurl,
-        dataType: 'json',
-        data:     ajaxArgs,
-    }).done(function(pp) {
-        pp2wp.pp_post_ids = pp;
-        pp2wp_total = pp.length;
-        pp2wp.doMigration();
-    });
-});
-</script>
-<?php
-}
-
-function pp2wp_get_pp_post_ids_callback() {
-    echo json_encode($GLOBALS['pp_import']->get_pp_post_ids());
+// first, the ajax calls
+function pp2wp_post_migration_status_callback() {
+    echo get_option('pp2wp_post_migration_percentage', 0);
     die();
 }
-add_action('wp_ajax_pp2wp_get_pp_post_ids', 'pp2wp_get_pp_post_ids_callback');
+add_action('wp_ajax_pp2wp_post_migration_status', 'pp2wp_post_migration_status_callback');
 
-function  pp2wp_import_pp_post_to_wp_callback() {
-    $pp_post_id = $_REQUEST['pp_post_id'];
-    $GLOBALS['pp_import']->pp_post2wp_post($pp_post_id);
-    echo json_encode(true);
+function pp2wp_post_migration_stop_callback() {
+    update_option('pp2wp_post_migration_stop', 'true');
     die();
 }
-add_action('wp_ajax_pp2wp_import_pp_post_to_wp', 'pp2wp_import_pp_post_to_wp_callback');
+add_action('wp_ajax_pp2wp_post_migration_stop', 'pp2wp_post_migration_stop_callback');
+
+function pp2wp_post_migration_resume_callback() {
+    update_option('pp2wp_post_migration_stop', 'false');
+    echo json_encode($GLOBALS['pp_import']->pp_posts2wp_posts());
+    die();
+}
+add_action('wp_ajax_pp2wp_post_migration_resume', 'pp2wp_post_migration_resume_callback');
+
+function pp2wp_post_migration_start_callback() {
+    echo json_encode($GLOBALS['pp_import']->pp_posts2wp_posts());
+    die();
+}
+add_action('wp_ajax_pp2wp_post_migration_start', 'pp2wp_post_migration_start_callback');
 
 
-// let's comment this, as we need to ajaxify the thing
+// let's comment this, as the ajax callbacks needs it (wp_ajax_pp2wp_post_migration_start & wp_ajax_pp2wp_post_migration_resume)
 // if ( ! defined('WP_LOAD_IMPORTERS'))
 //     return;
 
@@ -123,9 +60,9 @@ if ( ! class_exists( 'WP_Importer')) {
  */
 if ( class_exists( 'WP_Importer' ) ) {
 class PP_Import extends WP_Importer {
-    const PPIMPORTER_PIXELPOST_OPTIONS = 'odyssey_pp2wp_pixelpost_importer_settings';
-    const PPIMPORTER_PIXELPOST_SUBMIT  = 'odyssey_pp2wp_pixelpost_importer_submit';
-    const PPIMPORTER_PIXELPOST_RESET   = 'odyssey_pp2wp_pixelpost_importer_reset';
+    const PPIMPORTER_PIXELPOST_OPTIONS = 'pp2wp_pixelpost_importer_settings';
+    const PPIMPORTER_PIXELPOST_SUBMIT  = 'pp2wp_pixelpost_importer_submit';
+    const PPIMPORTER_PIXELPOST_RESET   = 'pp2wp_pixelpost_importer_reset';
    
     
     function header() {
@@ -140,7 +77,7 @@ class PP_Import extends WP_Importer {
 
     function get_pixelpost_default_settings() {
         $uploads = wp_upload_dir();
-        $tmp_dir = $uploads['basedir'] . '/odyssey_pp2wp/';
+        $tmp_dir = $uploads['basedir'] . '/pp2wp/';
         @mkdir($tmp_dir);
         return array(
             'dbuser'        => '',
@@ -292,18 +229,9 @@ class PP_Import extends WP_Importer {
 
     function get_pp_post_by_post_id($post_id) {
         $ppdb = $this->get_pp_db();
-        $ret = $ppdb->get_results("SELECT
-                                        id,
-                                        datetime,
-                                        headline,
-                                        body,
-                                        image
+        $ret = $ppdb->get_results("SELECT id, datetime, headline, body, image
                                     FROM {$this->prefix}pixelpost
-                                    WHERE id = '$post_id'
-                                    ",
-//                                     WHERE id=16
-//                                     WHERE id=17
-                                    ARRAY_A);
+                                    WHERE id = '$post_id'", ARRAY_A);
         if (is_array($ret)) {
             return $ret[0];
         } else {
@@ -311,19 +239,14 @@ class PP_Import extends WP_Importer {
         }
     }
 
-    function get_pp_posts() {
+    function get_pp_posts($min_pp_post_id) {
         $ppdb = $this->get_pp_db();
-        return $ppdb->get_results("SELECT
-                                        id,
-                                        datetime,
-                                        headline,
-                                        body,
-                                        image
-                                    FROM {$this->prefix}pixelpost
-                                    ",
-//                                     WHERE id=16
-//                                     WHERE id=17
-                                    ARRAY_A);
+        $query = "SELECT id, datetime, headline, body, image
+                 FROM {$this->prefix}pixelpost";
+        if (false !== $min_pp_post_id) {
+            $query .= " WHERE id>'$min_pp_post_id'";
+        }
+        return $ppdb->get_results($query, ARRAY_A);
     }
     
     function get_pp_post_comment_count( $post_id ) {
@@ -396,11 +319,11 @@ class PP_Import extends WP_Importer {
         return $tree;
     }
 
-    function insert_category_tree($ppCatTree, $parent_wp_cat_id = null) {
-        $ppcat2wpcat = array();
-        foreach ($ppCatTree as $name => $ppCat) {
+    function insert_category_tree($pp_cat_tree, $parent_wp_cat_id = null) {
+        $pp_cat2wpcat = array();
+        foreach ($pp_cat_tree as $name => $pp_cat) {
             $params = array(
-                'category_nicename' => $ppCat['nicename'],
+                'category_nicename' => $pp_cat['nicename'],
                 'cat_name'          => $name
             );
             if ($cinfo = category_exists($name)) {
@@ -412,62 +335,64 @@ class PP_Import extends WP_Importer {
 
             $wp_cat_id = wp_insert_category($params);
 
-            if ( ! is_null($ppCat['id'])) {
-                $ppcat2wpcat[ $ppCat['id'] ] = $wp_cat_id;
+            if ( ! is_null($pp_cat['id'])) {
+                $pp_cat2wpcat[ $pp_cat['id'] ] = $wp_cat_id;
             }
-            if ( ! $ppCat['leaf']) {
-                $ppcat2wpcat = $this->insert_category_tree($ppCat['sub'], $wp_cat_id) + $ppcat2wpcat;
+            if ( ! $pp_cat['leaf']) {
+                $pp_cat2wpcat = $this->insert_category_tree($pp_cat['sub'], $wp_cat_id) + $pp_cat2wpcat;
             }
         }
-        return $ppcat2wpcat;
+        return $pp_cat2wpcat;
     }
     
-    function cat2wp($categories) {
-        // General Housekeeping
-        global $wpdb;
-        $count          = 0;
-        $txpcat2wpcat   = array();
+    function pp_cats2wp_cats($categories) {
+        $pp_cats = $this->get_pp_cats();
+        $pp_cat_tree = $this->build_category_tree($pp_cats);
+        $pp_cats2wp_cats = $this->insert_category_tree($pp_cat_tree);
 
-        if (is_array($categories)) {
-            $catTree = $this->build_category_tree($categories);
-            $ppcat2wpcat = $this->insert_category_tree($catTree);
-
-            // $tmpPpCats = $this->get_pp_cats();
-            // $ppCat = array();
-            // foreach ($tmpPpCats as $c) {
-            // 	$ppCat[$c['id']] = $c['name'];
-            // }
-            // foreach ($ppcat2wpcat as $ppcatid => $wpcatid) {
-            //     echo '"' . $ppCat[$ppcatid] . '" => "' . get_cat_name($wpcatid) . '"' . PHP_EOL;
-            // }
-            
-            // Store category translation for future use
-            update_option('ppcat2wpcat', $ppcat2wpcat);
-            echo '<p>'.sprintf(__('Done! <strong>%1$s</strong> categories imported.'), count($ppcat2wpcat)).'<br /><br /></p>';
-            return true;
-        }
-        echo __('No Categories to Import!');
-        return false;
+        // $tmpPpCats = $this->get_pp_cats();
+        // $pp_cat = array();
+        // foreach ($tmpPpCats as $c) {
+        // 	$pp_cat[$c['id']] = $c['name'];
+        // }
+        // foreach ($pp_cat2wpcat as $pp_cat_id => $wp_cat_id) {
+        //     echo '"' . $pp_cat[$pp_cat_id] . '" => "' . get_cat_name($wp_cat_id) . '"' . PHP_EOL;
+        // }
+        
+        // Store category translation for future use
+        update_option('pp_cats2wp_cats', $pp_cats2wp_cats);
+        return count($pp_cats2wp_cats);
     }
     
-    function pp_post2wp_post($pp_post_id) {
+    function pp_posts2wp_posts() {
         global $wpdb;
         
-//         $ppposts2wpposts = array();
-        $ppcat2wpcat = get_option('ppcat2wpcat');
+        $pp_cats2wp_cats   = get_option('pp_cats2wp_cats');
+
+        $pp_posts2wp_posts = array();
+
+        $pp2wp_post_last_migrated_pp_id = get_option('pp2wp_post_last_migrated_pp_id');
+        $pp_posts       = $this->get_pp_posts($pp2wp_post_last_migrated_pp_id);
+        $pp_posts_count = count($pp_posts);
 
         // Let's assume the logged in user in the author of all imported posts
         $authorid = get_current_user_id();
 
         set_time_limit(0);
-//         foreach($pp_posts as $pp_post) {
-            $pp_post = $this->get_pp_post_by_post_id($pp_post_id);
-
+        foreach ( $pp_posts as $pp_post ) {
+            // all options are cached upon loading, so do here the db query
+            $row = $wpdb->get_row( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", 'pp2wp_post_migration_stop' ) );
+            $pp2wp_post_migration_stop = $row->option_value;
+            // $pp2wp_post_migration_stop = get_option('pp2wp_post_migration_stop');
+            if ('false' !== $pp2wp_post_migration_stop) {
+                break;
+            }
+            
             // retrieve this post categories ID
             $pp_categories = $this->get_pp_postcats($pp_post['id']);
             $wp_categories = array();
             foreach ($pp_categories as $pp_category) {
-                $wp_categories[] = $ppcat2wpcat[$pp_category];
+                $wp_categories[] = $pp_cats2wp_cats[$pp_category];
             }
 
             // let's insert the new post
@@ -534,37 +459,44 @@ class PP_Import extends WP_Importer {
             }
 
             // keep a reference to this post
-            $pp_posts2wp_posts[$pp_post['id']] = $wp_post_id;
-//         }
+            $pp_posts2wp_posts[ $pp_post['id'] ] = $wp_post_id;
+            
+            // Store ID translation for later use
+//            update_option('pp2wp_pp_post2wp_post_' . $pp_post['id'], $wp_post_id);
+
+            // keep a trace of the last migrated pixelpost post by keeping its id
+            update_option('pp2wp_post_last_migrated_pp_id', $pp_post['id']);
+            update_option('pp2wp_post_migration_percentage', round(count($pp_posts2wp_posts) * 100.0 / $pp_posts_count, 2));
+        }
         set_time_limit(30);
 
-        // Store ID translation for later use
-        update_option('odyssey_pp_posts2wp_posts_' . $pp_post_id, $wp_post_id);
-
-        return true;    
+        update_option('pp_cats2wp_cats', $pp_posts2wp_posts);
+        return count($pp_posts2wp_posts);
     }
         
     function import_categories() {
-        // Category Import
-        $cats = $this->get_pp_cats();
-        $this->cat2wp($cats);
-        add_option('pp_cats', $cats);
+        $n_cats = $this->pp_cats2wp_cats($pp_cats);
+        echo '<p>'.sprintf(__('Done! <strong>%1$s</strong> categories imported.'), $n_cats).'<br /><br /></p>';
     }
     
     function import_posts() {
-        // Post Import
-//         $posts = $this->get_pp_posts();
+        wp_enqueue_script( 'pixelpost-importer', plugins_url('/pixelpost-importer.js', __FILE__) );
         echo '<p>' . sprintf(__('Retrieved %d posts from Pixelpost, importing...'), $this->get_pp_post_count()) . '</p>';
-        js_getPPPosts();
+        echo '<p id="pp2wp_post_migration_log">'. __('Starting...') . '</p>';
+        echo '<p>';
+        echo '  <input id="pp2wp_post_migration_stop"   type="submit" name="stop migration"   value="stop migration"   class="button button-primary"/>';
+        echo '  <input id="pp2wp_post_migration_resume" type="submit" name="resume migration" value="resume migration" class="button button-primary"/>';
+        echo '</p>';
+
+        update_option('pp2wp_post_migration_stop', 'false');
+        delete_option('pp2wp_post_last_migrated_pp_id');
 //         $this->posts2wp($posts);
 
     }
     
     function cleanup_ppimport() {
-        delete_option('pp_cats');
-        delete_option('ppcat2wpcat');
-        delete_option('ppposts2wpposts');
-        delete_option('ppcm2wpcm');
+        delete_option('pp_cats2wp_cats');
+        delete_option('pp_posts2wp_posts');
     }
     
     function dispatch() {
@@ -583,7 +515,7 @@ class PP_Import extends WP_Importer {
             case 0 : $this->greet();             break;
             case 1 : $this->import_categories(); break;
             case 2 : $this->import_posts();      break;
-            case 4 : $this->cleanup_ppimport();  break;
+            case 3 : $this->cleanup_ppimport();  break;
         }
         
         $step2Str = array(
@@ -616,7 +548,7 @@ function pixelpost_importer_init() {
     register_importer(
         'pixelpost',
         'PixelPost',
-        __('Import <strong>posts, pages, comments, custom fields, categories, and tags</strong> pixelpost installation.', 'pixelpost-importer'),
+        __('Import <strong>posts, comments, and categories</strong> from a pixelpost installation.', 'pixelpost-importer'),
         array($GLOBALS['pp_import'], 'dispatch')
     );
 }
