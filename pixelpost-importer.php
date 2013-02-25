@@ -27,14 +27,14 @@ var pp2wp = {
     doMigration: function() {
         if (pp2wp.stop) return;
 //         this.current += 1:
-        var ppPostId = pp2wp.ppPostIds[pp2wp_current];
-        if (typeof(ppPostId) == 'undefined') {
-            jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + ppPostId + '" (index "' + pp2wp_current + '") aborted!');
+        var pp_post_id = pp2wp.pp_post_ids[pp2wp_current];
+        if (typeof(pp_post_id) == 'undefined') {
+            jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + pp_post_id + '" (index "' + pp2wp_current + '") aborted!');
             return;
         }
         var ajaxArgs = {
-            action:   'pp2wp_import_pp_post_to_wp',
-            ppPostId: ppPostId
+            action:     'pp2wp_import_pp_post_to_wp',
+            pp_post_id: pp_post_id
         }
         jQuery.ajax({
             url:      ajaxurl,
@@ -43,11 +43,11 @@ var pp2wp = {
         }).done(function(r) {
             if (r) {
                 pp2wp_current++;
-                jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + ppPostId +
+                jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + pp_post_id +
                     '" (index "' + pp2wp_current + '")  successfully imported');
                 setTimeout('pp2wp.doMigration()', 50);
             } else {
-                jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + ppPostId +
+                jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + pp_post_id +
                     '" (index "' + pp2wp_current + '")  could not be imported');
             }
         });
@@ -76,7 +76,7 @@ jQuery(document).ready(function($) {
         dataType: 'json',
         data:     ajaxArgs,
     }).done(function(pp) {
-        pp2wp.ppPostIds = pp;
+        pp2wp.pp_post_ids = pp;
         pp2wp.doMigration();
     });
 });
@@ -143,17 +143,17 @@ class PP_Import extends WP_Importer {
 
     function get_pixelpost_default_settings() {
         $uploads = wp_upload_dir();
-        $tmpDir = $uploads['basedir'] . '/odyssey_pp2wp/';
-        @mkdir($tmpDir);
+        $tmp_dir = $uploads['basedir'] . '/odyssey_pp2wp/';
+        @mkdir($tmp_dir);
         return array(
-            'dbuser'       => '',
-            'dbpass'       => '',
-            'dbname'       => '',
-            'dbhost'       => 'localhost',
-            'dbpre'        => 'pixelpost_',
-            'ppurl'        => 'http://127.0.0.1/pixelpost/',
-            'tmpDirectory' => $tmpDir,
-            'imageSize'    => 'full',
+            'dbuser'        => '',
+            'dbpass'        => '',
+            'dbname'        => '',
+            'dbhost'        => 'localhost',
+            'dbpre'         => 'pixelpost_',
+            'ppurl'         => 'http://127.0.0.1/pixelpost/',
+            'tmp_directory' => $tmp_dir,
+            'image_size'    => 'full',
         );
     }
     function get_pixelpost_settings() {
@@ -165,14 +165,14 @@ class PP_Import extends WP_Importer {
     }
     static function setting2Label($s) {
          $s2l = array(
-            'dbuser'       => __('Pixelpost Database User:'),
-            'dbpass'       => __('Pixelpost Database Password:'),
-            'dbname'       => __('Pixelpost Database Name:'),
-            'dbhost'       => __('Pixelpost Database Host:'),
-            'dbpre'        => __('Pixelpost Table Prefix:'),
-            'ppurl'        => __('Pixelpost original url:'),
-            'tmpDirectory' => __('Directory for temp files:'),
-            'imageSize'    => __('Imported image size in post (thumbnail, medium, large or full):'),
+            'dbuser'        => __('Pixelpost Database User:'),
+            'dbpass'        => __('Pixelpost Database Password:'),
+            'dbname'        => __('Pixelpost Database Name:'),
+            'dbhost'        => __('Pixelpost Database Host:'),
+            'dbpre'         => __('Pixelpost Table Prefix:'),
+            'ppurl'         => __('Pixelpost original url:'),
+            'tmp_directory' => __('Directory for temp files:'),
+            'image_size'    => __('Imported image size in post (thumbnail, medium, large or full):'),
         );
         return $s2l[$s];
     }
@@ -229,10 +229,10 @@ class PP_Import extends WP_Importer {
         $this->ppdb->show_errors();
         set_magic_quotes_runtime(0);
 
-        $this->prefix  = $settings['dbpre'];
-        $this->ppurl   = $settings['ppurl'];
-        $this->tmpDir  = $settings['tmpDirectory'];
-        $this->imgSize = $settings['imageSize'];
+        $this->prefix   = $settings['dbpre'];
+        $this->ppurl    = $settings['ppurl'];
+        $this->tmp_dir  = $settings['tmp_directory'];
+        $this->img_size = $settings['image_size'];
     }
 
     function get_pp_db() {
@@ -368,7 +368,7 @@ class PP_Import extends WP_Importer {
         return $tree;
     }
 
-    function insert_category_tree($ppCatTree, $parentWpCatId = null) {
+    function insert_category_tree($ppCatTree, $parent_wp_cat_id = null) {
         $ppcat2wpcat = array();
         foreach ($ppCatTree as $name => $ppCat) {
             $params = array(
@@ -378,17 +378,17 @@ class PP_Import extends WP_Importer {
             if ($cinfo = category_exists($name)) {
                 $params['cat_ID'] = $cinfo;
             }
-            if ( ! is_null($parentWpCatId)) {
-                $params['category_parent'] = $parentWpCatId;
+            if ( ! is_null($parent_wp_cat_id)) {
+                $params['category_parent'] = $parent_wp_cat_id;
             }
 
-            $wpCatId = wp_insert_category($params);
+            $wp_cat_id = wp_insert_category($params);
 
             if ( ! is_null($ppCat['id'])) {
-                $ppcat2wpcat[ $ppCat['id'] ] = $wpCatId;
+                $ppcat2wpcat[ $ppCat['id'] ] = $wp_cat_id;
             }
             if ( ! $ppCat['leaf']) {
-                $ppcat2wpcat = $this->insert_category_tree($ppCat['sub'], $wpCatId) + $ppcat2wpcat;
+                $ppcat2wpcat = $this->insert_category_tree($ppCat['sub'], $wp_cat_id) + $ppcat2wpcat;
             }
         }
         return $ppcat2wpcat;
@@ -422,13 +422,13 @@ class PP_Import extends WP_Importer {
         return false;
     }
     
-    function posts2wp($ppPosts) {
+    function posts2wp($pp_posts) {
         global $wpdb;
         
         $ppposts2wpposts = array();
         $ppcat2wpcat     = get_option('ppcat2wpcat');
 
-        if ( ! is_array($ppPosts)) {
+        if ( ! is_array($pp_posts)) {
             return false;
         }
 
@@ -437,9 +437,9 @@ class PP_Import extends WP_Importer {
 
         echo '<p>' . __('Importing Posts...') . '<br /><br /></p>';
         set_time_limit(0);
-        foreach($ppPosts as $ppPost) {
+        foreach($pp_posts as $pp_post) {
             // retrieve this post categories ID
-            $ppCategories = $this->get_pp_postcats($ppPost['id']);
+            $ppCategories = $this->get_pp_postcats($pp_post['id']);
             $wpCategories = array();
             foreach ($ppCategories as $ppCategory) {
                 $wpCategories[] = $ppcat2wpcat[$ppCategory];
@@ -450,18 +450,18 @@ class PP_Import extends WP_Importer {
                 'comment_status' => 'open',
                 'ping_status'    => 'open',
                 'post_author'    => $authorid,
-                'post_date'      => $ppPost['datetime'],
-                'post_modified'  => $ppPost['datetime'],
+                'post_date'      => $pp_post['datetime'],
+                'post_modified'  => $pp_post['datetime'],
                 'post_content'   => '',
                 'post_status'    => 'publish',
-                'post_title'     => utf8_decode($ppPost['headline']),
+                'post_title'     => utf8_decode($pp_post['headline']),
                 'post_category'  => $wpCategories,
             );
-            $wpPostId = wp_insert_post($wp_post_params, true);
+            $wp_post_id = wp_insert_post($wp_post_params, true);
 
             // download the post image ( !  may be troublesome on certain platforms!)
-            $pp_image_url      = str_replace(' ', '%20', $this->ppurl . '/images/' . $ppPost['image']);
-            $pp_image_tmp_file = $this->tmpDir . '/' . $ppPost['image'];
+            $pp_image_url      = str_replace(' ', '%20', $this->ppurl . '/images/' . $pp_post['image']);
+            $pp_image_tmp_file = $this->tmp_dir . '/' . $pp_post['image'];
             
             $response = wp_remote_get($pp_image_url, array('timeout' => 300, 'stream' => true, 'filename' => $pp_image_tmp_file));
             if (is_wp_error($response)) {
@@ -477,39 +477,39 @@ class PP_Import extends WP_Importer {
             );
 
             // do the validation and storage stuff, note that the tmp file is moved, no need for unlink
-            $wpPostImgId = media_handle_sideload($file_array, $wpPostId, $wp_post_params['post_title']);
+            $wp_post_img_id = media_handle_sideload($file_array, $wp_post_id, $wp_post_params['post_title']);
 
             // update the newly inserted post with a link and a post to the image
-            $img = wp_get_attachment_image($wpPostImgId, $this->imgSize);
-            $url = '<a href ="' . wp_get_attachment_url($wpPostImgId) . '">' . $img . '</a>';
+            $img = wp_get_attachment_image($wp_post_img_id, $this->img_size);
+            $url = '<a href ="' . wp_get_attachment_url($wp_post_img_id) . '">' . $img . '</a>';
             // Update the post into the database
-            $wp_post_params['ID'] = $wpPostId;
-            $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . utf8_decode($ppPost['body']);
+            $wp_post_params['ID'] = $wp_post_id;
+            $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . utf8_decode($pp_post['body']);
             wp_update_post($wp_post_params);
 
             // set post format to image
-            set_post_format($wpPostId, 'image');
+            set_post_format($wp_post_id, 'image');
             
             // get the comments bound to this post
-            $ppComments = $this->get_pp_comment_by_post_id($ppPost['id']);
-            foreach ($ppComments as $ppComment) {
+            $pp_comments = $this->get_pp_comment_by_post_id($pp_post['id']);
+            foreach ($pp_comments as $pp_comment) {
                 $wpCommentParams = array(
-                    'comment_post_ID'      => $wpPostId,
-                    'comment_author'       => utf8_decode($ppComment['name']),
-                    'comment_author_email' => $ppComment['email'],
-                    'comment_author_url'   => $ppComment['url'],
-                    'comment_content'      => html_entity_decode(utf8_decode($ppComment['message'])),
+                    'comment_post_ID'      => $wp_post_id,
+                    'comment_author'       => utf8_decode($pp_comment['name']),
+                    'comment_author_email' => $pp_comment['email'],
+                    'comment_author_url'   => $pp_comment['url'],
+                    'comment_content'      => html_entity_decode(utf8_decode($pp_comment['message'])),
                     'user_id'              => $authorid,
-                    'comment_author_IP'    => $ppComment['ip'],
+                    'comment_author_IP'    => $pp_comment['ip'],
                     'comment_agent'        => 'Import from PP',
-                    'comment_date'         => $ppComment['datetime'],
+                    'comment_date'         => $pp_comment['datetime'],
                     'comment_approved'     => true,
                 );
                 wp_insert_comment($wpCommentParams);
             }
 
             // keep a reference to this post
-            $pp_posts2wp_posts[$ppPost['id']] = $wpPostId;
+            $pp_posts2wp_posts[$pp_post['id']] = $wp_post_id;
         }
         set_time_limit(30);
 
