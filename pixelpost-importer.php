@@ -15,41 +15,57 @@ License: GPL version 2 or later - http://www.gnu.org/licenses/old-licenses/gpl-2
 function js_getPPPosts() {
 ?>
 <div id="pp2wp_post_importation_log"></div>
-<p><input id="pp2wp_post_importation_stop" type="submit" name="stop importing" value="stop importing" class="button button-primary"/></p>
+<p>
+  <input id="pp2wp_post_importation_stop"   type="submit" name="stop importing" value="stop importing"   class="button button-primary"/>
+  <input id="pp2wp_post_importation_resume" type="submit" name="stop importing" value="resume importing" class="button button-primary"/>
+</p>
 
 <script type="text/javascript" >
-var pp2wp = {};
-pp2wp.stop = false;
+var pp2wp_current = 0;
+var pp2wp = {
+    stop: false,
+    doMigration: function() {
+        if (pp2wp.stop) return;
+//         this.current += 1:
+        var ppPostId = pp2wp.ppPostIds[pp2wp_current];
+        if (typeof(ppPostId) == 'undefined') {
+            jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + ppPostId + '" (index "' + pp2wp_current + '") aborted!');
+            return;
+        }
+        var ajaxArgs = {
+            action:   'pp2wp_import_pp_post_to_wp',
+            ppPostId: ppPostId
+        }
+        jQuery.ajax({
+            url:      ajaxurl,
+            dataType: 'json',
+            data:     ajaxArgs
+        }).done(function(r) {
+            if (r) {
+                pp2wp_current++;
+                jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + ppPostId +
+                    '" (index "' + pp2wp_current + '")  successfully imported');
+                setTimeout('pp2wp.doMigration()', 50);
+            } else {
+                jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + ppPostId +
+                    '" (index "' + pp2wp_current + '")  could not be imported');
+            }
+        });
+    }
+};
+
 
 jQuery(document).on('click', '#pp2wp_post_importation_stop', function(e) {
     pp2wp.stop = true;
     e.preventDefault();
     return false;
 });
-
-function pp2wpDoMigrate(i) {
-    if (pp2wp.stop) return;
-    if (typeof(pp2wp.ppPostIds[i]) == 'undefined') {
-        jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" (index "' + i + '") aborted!');
-        return;
-    }
-    var ajaxArgs = {
-        action:   'pp2wp_import_pp_post_to_wp',
-        ppPostId: pp2wp.ppPostIds[i]
-    }
-    jQuery.ajax({
-        url:      ajaxurl,
-        dataType: 'json',
-        data:     ajaxArgs
-    }).done(function(r) {
-        if (r) {
-            jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" (index "' + i + '")  successfully imported');
-            setTimeout('pp2wpDoMigrate(' + (i + 1) + ')', 50);
-        } else {
-            jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" (index "' + i + '")  could not be imported');
-        }
-    });
-}
+jQuery(document).on('click', '#pp2wp_post_importation_resume', function(e) {
+    pp2wp.stop = false;
+    pp2wp.doMigration();
+    e.preventDefault();
+    return false;
+});
 
 jQuery(document).ready(function($) {
     var ajaxArgs = {
@@ -61,7 +77,7 @@ jQuery(document).ready(function($) {
         data:     ajaxArgs,
     }).done(function(pp) {
         pp2wp.ppPostIds = pp;
-        pp2wpDoMigrate(0);
+        pp2wp.doMigration();
     });
 });
 </script>
