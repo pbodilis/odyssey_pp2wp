@@ -104,7 +104,7 @@ add_action('wp_ajax_pp2wp_import_pp_post_to_wp', 'pp2wp_import_pp_post_to_wp_cal
 
 
 // let's comment this, as we need to ajaxify the thing
-// if (!defined('WP_LOAD_IMPORTERS'))
+// if ( ! defined('WP_LOAD_IMPORTERS'))
 //     return;
 
 /** Display verbose errors */
@@ -112,7 +112,7 @@ define('IMPORT_DEBUG', true);
 
 // Load Importer API
 require_once ABSPATH . 'wp-admin/includes/import.php';
-if (!class_exists( 'WP_Importer')) {
+if ( ! class_exists( 'WP_Importer')) {
     $class_wp_importer = ABSPATH . 'wp-admin/includes/class-wp-importer.php';
     if (file_exists( $class_wp_importer))
         require $class_wp_importer;
@@ -178,12 +178,12 @@ class PP_Import extends WP_Importer {
     }
 
     function greet() {
-        if ( isset ( $_POST[self::PPIMPORTER_PIXELPOST_RESET] ) ) {
+        if ( isset( $_POST[self::PPIMPORTER_PIXELPOST_RESET] ) ) {
             delete_option(self::PPIMPORTER_PIXELPOST_OPTIONS);
         }
         $settings = $this->get_pixelpost_settings();
-        if ( isset ( $_POST[ self::PPIMPORTER_PIXELPOST_SUBMIT ] ) ) {
-            unset ( $_POST[ self::PPIMPORTER_PIXELPOST_SUBMIT ] );
+        if ( isset( $_POST[ self::PPIMPORTER_PIXELPOST_SUBMIT ] ) ) {
+            unset( $_POST[ self::PPIMPORTER_PIXELPOST_SUBMIT ] );
             foreach ( $_POST as $name => $setting ) {
                 $settings[$name] = $setting;
             }
@@ -236,7 +236,7 @@ class PP_Import extends WP_Importer {
     }
 
     function get_pp_db() {
-        if (!isset($this->ppdb)) $this->init();
+        if ( ! isset($this->ppdb)) $this->init();
         return $this->ppdb;
     }
 
@@ -250,7 +250,7 @@ class PP_Import extends WP_Importer {
         return $ppdb->get_results("SELECT id, name FROM {$this->prefix}categories", ARRAY_A);
     }
     
-    function get_pp_postcat($postId) {
+    function get_pp_postcat( $postId ) {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT cat.name 
                                     FROM {$this->prefix}pixelpost p
@@ -259,7 +259,7 @@ class PP_Import extends WP_Importer {
                                     ARRAY_A);
     }
     
-    function get_pp_postcats($postId) {
+    function get_pp_postcats( $postId ) {
         $ppdb = $this->get_pp_db();
         $res = $ppdb->get_results("SELECT ca.cat_id
                                    FROM {$this->prefix}catassoc ca
@@ -298,7 +298,7 @@ class PP_Import extends WP_Importer {
                                     ARRAY_A);
     }
     
-    function get_pp_post_comment_count($postId) {
+    function get_pp_post_comment_count( $postId ) {
         $ppdb = $this->get_pp_db();
         $ret = $ppdb->get_results("SELECT count(id) as 'comments_count' FROM {$this->prefix}comments WHERE parent_id = '$postId'", ARRAY_A);
         if (is_array($ret)) {
@@ -308,7 +308,7 @@ class PP_Import extends WP_Importer {
         }
     }
     
-    function get_pp_comment_by_post_id($postId) {
+    function get_pp_comment_by_post_id( $postId ) {
         $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT
                                         id,
@@ -341,16 +341,16 @@ class PP_Import extends WP_Importer {
                                     ARRAY_A);
     }
     
-    function build_category_tree($categories) {
+    function build_category_tree( $categories ) {
         global $wpdb;
         $tree = array();
-        foreach ($categories as $category) {
+        foreach ( $categories as $category ) {
             $path = explode('/', $category['name']);
             $last = end($path);
             reset($path);
             $t = &$tree;
-            foreach ($path as $p) {
-                if (!isset($t[$p])) {
+            foreach ( $path as $p ) {
+                if ( ! isset( $t[ $p ] )) {
                     $name = $wpdb->escape($p);
                     $leaf = ($p == $last);
                     $t[$p] = array(
@@ -360,9 +360,9 @@ class PP_Import extends WP_Importer {
                         'sub'      => array(),
                     );
                 } else {
-                    $t[$p]['leaf'] &= ($p == $last);
+                    $t[ $p ]['leaf'] &= ($p == $last);
                 }
-                $t = &$t[$p]['sub'];
+                $t = &$t[ $p ]['sub'];
             }
         }
         return $tree;
@@ -378,16 +378,16 @@ class PP_Import extends WP_Importer {
             if ($cinfo = category_exists($name)) {
                 $params['cat_ID'] = $cinfo;
             }
-            if (!is_null($parentWpCatId)) {
+            if ( ! is_null($parentWpCatId)) {
                 $params['category_parent'] = $parentWpCatId;
             }
 
             $wpCatId = wp_insert_category($params);
 
-            if (!is_null($ppCat['id'])) {
-                $ppcat2wpcat[$ppCat['id']] = $wpCatId;
+            if ( ! is_null($ppCat['id'])) {
+                $ppcat2wpcat[ $ppCat['id'] ] = $wpCatId;
             }
-            if (!$ppCat['leaf']) {
+            if ( ! $ppCat['leaf']) {
                 $ppcat2wpcat = $this->insert_category_tree($ppCat['sub'], $wpCatId) + $ppcat2wpcat;
             }
         }
@@ -428,7 +428,7 @@ class PP_Import extends WP_Importer {
         $ppposts2wpposts = array();
         $ppcat2wpcat     = get_option('ppcat2wpcat');
 
-        if (!is_array($ppPosts)) {
+        if ( ! is_array($ppPosts)) {
             return false;
         }
 
@@ -459,7 +459,7 @@ class PP_Import extends WP_Importer {
             );
             $wpPostId = wp_insert_post($wp_post_params, true);
 
-            // download the post image (! may be troublesome on certain platforms!)
+            // download the post image ( !  may be troublesome on certain platforms!)
             $pp_image_url      = str_replace(' ', '%20', $this->ppurl . '/images/' . $ppPost['image']);
             $pp_image_tmp_file = $this->tmpDir . '/' . $ppPost['image'];
             
