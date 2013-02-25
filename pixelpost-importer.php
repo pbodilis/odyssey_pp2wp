@@ -10,52 +10,97 @@ Text Domain: pixelpost-importer
 License: GPL version 2 or later - http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 */
 
-if ( ! defined( 'WP_LOAD_IMPORTERS' ) )
-	return;
+
+// add_action('admin_print_scripts', 'my_action_javascript');
+function js_getPPPosts() {
+?>
+<div id="pp2wp_post_importation_log"></div>
+<p><input id="pp2wp_post_importation_stop" type="submit" name="stop importing" value="stop importing" class="button button-primary"/></p>
+
+<script type="text/javascript" >
+var pp2wp = {};
+pp2wp.stop = false;
+
+jQuery(document).on('click', '#pp2wp_post_importation_stop', function(e) {
+    pp2wp.stop = true;
+    e.preventDefault();
+    return false;
+});
+
+function pp2wpDoMigrate(i) {
+    if (pp2wp.stop) return;
+    if (typeof(pp2wp.ppPostIds[i]) == 'undefined') {
+        jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" aborted!');
+        return;
+    }
+    var ajaxArgs = {
+        action:   'pp2wp_import_pp_post_to_wp',
+        ppPostId: pp2wp.ppPostIds[i]
+    }
+    jQuery.ajax({
+        url:      ajaxurl,
+        dataType: 'json',
+        data:     ajaxArgs
+    }).done(function(r) {
+        if (r) {
+            jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" could not be imported');
+        } else {
+            jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + pp2wp.ppPostIds[i] + '" successfully imported');
+            pp2wpDoMigrate(i + 1);
+        }
+    });
+}
+
+jQuery(document).ready(function($) {
+    var ajaxArgs = {
+        action:   'pp2wp_get_pp_post_ids'
+    }
+    jQuery.ajax({
+        url:      ajaxurl,
+        dataType: 'json',
+        data:     ajaxArgs,
+    }).done(function(pp) {
+        pp2wp.ppPostIds = pp;
+        pp2wpDoMigrate(0);
+    });
+});
+</script>
+<?php
+}
+
+function pp2wp_get_pp_post_ids_callback() {
+    $ret = array();
+    $ppIds = $GLOBALS['pp_import']->get_pp_post_ids();
+    foreach($ppIds as $ppId) {
+        $ret[] = $ppId['id'];
+    }
+    
+    echo json_encode(array_values($ret));
+    die();
+}
+add_action('wp_ajax_pp2wp_get_pp_post_ids', 'pp2wp_get_pp_post_ids_callback');
+
+function  pp2wp_import_pp_post_to_wp_callback() {
+    echo json_encode(true);
+    die();
+}
+add_action('wp_ajax_pp2wp_import_pp_post_to_wp', 'pp2wp_import_pp_post_to_wp_callback');
+
+
+// let's comment this, as we need to ajaxify the thing
+// if (!defined('WP_LOAD_IMPORTERS'))
+//     return;
 
 /** Display verbose errors */
-define( 'IMPORT_DEBUG', false );
+define('IMPORT_DEBUG', true);
 
 // Load Importer API
 require_once ABSPATH . 'wp-admin/includes/import.php';
-
-if ( ! class_exists( 'WP_Importer' ) ) {
-	$class_wp_importer = ABSPATH . 'wp-admin/includes/class-wp-importer.php';
-	if ( file_exists( $class_wp_importer ) )
-		require $class_wp_importer;
+if (!class_exists( 'WP_Importer')) {
+    $class_wp_importer = ABSPATH . 'wp-admin/includes/class-wp-importer.php';
+    if (file_exists( $class_wp_importer))
+        require $class_wp_importer;
 }
-
-/**
-    Add These Functions to make our lives easier
-**/
-if(!function_exists('get_catbynicename')) {
-    function get_catbyname($category_name) 
-    {
-        global $wpdb;
-        
-        $cat_id -= 0;   // force numeric
-        $name = $wpdb->get_var('SELECT cat_ID FROM '.$wpdb->categories.' WHERE cat_name="'.$category_name.'"');
-        
-        return $name;
-    }
-}
-
-if(!function_exists('get_comment_count')) {
-    function get_comment_count($postId)
-    {
-        global $wpdb;
-        return $wpdb->get_var('SELECT count(*) FROM '.$wpdb->comments.' WHERE comment_post_ID = '.$postId);
-    }
-}
-
-if(!function_exists('link_exists')) {
-    function link_exists($linkname)
-    {
-        global $wpdb;
-        return $wpdb->get_var('SELECT link_id FROM '.$wpdb->links.' WHERE link_name = "'.$wpdb->escape($linkname).'"');
-    }
-}
-
 
 /**
  * Pixelpost Importer class
@@ -73,6 +118,7 @@ class PP_Import extends WP_Importer {
     function header() 
     {
         echo '<div class="wrap">';
+        echo '<div id="icon-tools" class="icon32"><br></div>' . PHP_EOL;
         echo '<h2>'.__('Import Pixelpost').'</h2>';
     }
 
@@ -134,7 +180,8 @@ class PP_Import extends WP_Importer {
             update_option(self::PPIMPORTER_PIXELPOST_OPTIONS, $settings);
         }
 
-        echo '<p>'.__('Howdy! This importer allows you to extract posts from a Pixelpost install 1.4.2 into your blog.').'</p>';
+        echo '<p>'.__('This importer allows you to extract posts from a Pixelpost install into wordpress.').'</p>';
+        echo '<p>'.__('Please note that this improter has been developped for pixelpost 1.7.1 and wordpress 3.5.1. It may not work very well with other versions.').'</p>';
         echo '<p>'.__('Your Pixelpost configuration settings are as follows:').'</p>';
 
         echo '<form action="admin.php?import=pixelpost&amp;step=1" method="post">';
@@ -222,6 +269,17 @@ class PP_Import extends WP_Importer {
         return $ret;
     }
     
+    function get_pp_post_ids()
+    {
+        $ppdb = $this->getPPDB();
+        return $ppdb->get_results("SELECT id FROM {$this->prefix}pixelpost
+                                    ",
+//                                     WHERE id=16
+//                                     WHERE id=17
+                                    ARRAY_A);
+    }
+
+
     function get_pp_posts()
     {
         $ppdb = $this->getPPDB();
@@ -232,8 +290,9 @@ class PP_Import extends WP_Importer {
                                         body,
                                         image
                                     FROM {$this->prefix}pixelpost
-                                    WHERE id=16
                                     ",
+//                                     WHERE id=16
+//                                     WHERE id=17
                                     ARRAY_A);
     }
     
@@ -262,7 +321,8 @@ class PP_Import extends WP_Importer {
                                         email
                                     FROM {$this->prefix}comments
                                     WHERE parent_id = '$postId'
-                                      AND publish = 'yes'",
+                                      AND publish = 'yes'
+                                    ORDER BY datetime ASC",
                                     ARRAY_A);
     }
 
@@ -370,8 +430,8 @@ class PP_Import extends WP_Importer {
     {
         global $wpdb;
         
-        $ppposts2wpposts        = array();
-        $ppcat2wpcat = get_option('ppcat2wpcat', $ppcat2wpcat);
+        $ppposts2wpposts = array();
+        $ppcat2wpcat     = get_option('ppcat2wpcat');
 
         if (!is_array($ppPosts)) {
             return false;
@@ -410,6 +470,7 @@ class PP_Import extends WP_Importer {
             
             $response = wp_remote_get($ppImageUrl, array('timeout' => 300, 'stream' => true, 'filename' => $ppImageTmpFile));
             if (is_wp_error($response)) {
+                var_dump($response);
                 unlink($tmpfname);
                 return $response;
             }
@@ -460,13 +521,13 @@ class PP_Import extends WP_Importer {
         // Store ID translation for later use
         update_option('ppPosts2wpPosts', $ppPosts2wpPosts);
         
-        echo '<p>'.sprintf(__('Done! <strong>%1$s</strong> posts imported.'), $count).'<br /><br /></p>';
+        echo '<p>'.sprintf(__('Done! <strong>%1$s</strong> posts imported.'), count($ppPosts2wpPosts)).'<br /><br /></p>';
         return true;    
     }
         
     function import_categories() 
-    {   
-        // Category Import  
+    {
+        // Category Import
         $cats = $this->get_pp_cats();
         $this->cat2wp($cats);
         add_option('pp_cats', $cats);
@@ -476,8 +537,10 @@ class PP_Import extends WP_Importer {
     {
         // Post Import
         $posts = $this->get_pp_posts();
-        echo sprintf(__('Retrieved %d posts from Pixelpost, importing...'), count($posts));
-        $this->posts2wp($posts);
+        echo '<p>' . sprintf(__('Retrieved %d posts from Pixelpost, importing...'), count($posts)) . '</p>';
+        js_getPPPosts();
+//         $this->posts2wp($posts);
+
     }
     
     function cleanup_ppimport()
@@ -529,18 +592,17 @@ class PP_Import extends WP_Importer {
 } // class_exists( 'WP_Importer' )
 
 function pixelpost_importer_init() {
-	//load_plugin_textdomain( 'pixelpost-importer', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
-
-	/**
-	 * WordPress Importer object for registering the import callback
-	 * @global WP_Import $wp_import
-	 */
-	$GLOBALS['pp_import'] = new PP_Import();
-	register_importer(
-	    'pixelpost',
-	    'PixelPost',
-	    __('Import <strong>posts, pages, comments, custom fields, categories, and tags</strong> pixelpost installation.', 'pixelpost-importer'),
-	    array( $GLOBALS['pp_import'], 'dispatch')
+    //load_plugin_textdomain( 'pixelpost-importer', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+    /**
+     * WordPress Importer object for registering the import callback
+     * @global WP_Import $wp_import
+     */
+    $GLOBALS['pp_import'] = new PP_Import();
+    register_importer(
+        'pixelpost',
+        'PixelPost',
+        __('Import <strong>posts, pages, comments, custom fields, categories, and tags</strong> pixelpost installation.', 'pixelpost-importer'),
+        array($GLOBALS['pp_import'], 'dispatch')
     );
 }
-add_action( 'admin_init', 'pixelpost_importer_init' );
+add_action('admin_init', 'pixelpost_importer_init');
