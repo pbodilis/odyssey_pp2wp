@@ -16,8 +16,8 @@ function js_getPPPosts() {
 ?>
 <div id="pp2wp_post_importation_log"></div>
 <p>
-  <input id="pp2wp_post_importation_stop"   type="submit" name="stop importing" value="stop importing"   class="button button-primary"/>
-  <input id="pp2wp_post_importation_resume" type="submit" name="stop importing" value="resume importing" class="button button-primary"/>
+    <input id="pp2wp_post_importation_stop"   type="submit" name="stop importing"   value="stop importing"   class="button button-primary"/>
+    <input id="pp2wp_post_importation_resume" type="submit" name="resume importing" value="resume importing" class="button button-primary"/>
 </p>
 
 <script type="text/javascript" >
@@ -29,7 +29,7 @@ var pp2wp = {
 //         this.current += 1:
         var ppPostId = pp2wp.ppPostIds[pp2wp_current];
         if (typeof(ppPostId) == 'undefined') {
-            jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + ppPostId + '" (index "' + pp2wp_current + '") aborted!');
+            jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + ppPostId + '" (index "' + pp2wp_current + '") aborted!');
             return;
         }
         var ajaxArgs = {
@@ -43,11 +43,11 @@ var pp2wp = {
         }).done(function(r) {
             if (r) {
                 pp2wp_current++;
-                jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + ppPostId +
+                jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + ppPostId +
                     '" (index "' + pp2wp_current + '")  successfully imported');
                 setTimeout('pp2wp.doMigration()', 50);
             } else {
-                jQuery('#pp2wp_post_importation_log').html('Pixelpost POST with ID "' + ppPostId +
+                jQuery('#pp2wp_post_importation_log').html('Pixelpost post with ID "' + ppPostId +
                     '" (index "' + pp2wp_current + '")  could not be imported');
             }
         });
@@ -143,7 +143,7 @@ class PP_Import extends WP_Importer {
         echo '</div>';
     }
 
-    function getPixelpostDefaultSettings()
+    function get_pixelpost_default_settings()
     {
         $uploads = wp_upload_dir();
         $tmpDir = $uploads['basedir'] . '/odyssey_pp2wp/';
@@ -159,6 +159,11 @@ class PP_Import extends WP_Importer {
             'imageSize'    => 'full',
         );
     }
+    function get_pixelpost_settings()
+    {
+        return get_option(self::PPIMPORTER_PIXELPOST_OPTIONS, $this->get_pixelpost_default_settings());
+    }
+
     static function setting2Type($s)
     {
         return ($s == 'dbpass') ? 'password' : 'text';
@@ -177,17 +182,13 @@ class PP_Import extends WP_Importer {
         );
         return $s2l[$s];
     }
-    function getPixelpostSettings()
-    {
-        return get_option(self::PPIMPORTER_PIXELPOST_OPTIONS, $this->getPixelpostDefaultSettings());
-    }
 
     function greet() 
     {
         if (isset($_POST[self::PPIMPORTER_PIXELPOST_RESET])) {
             delete_option(self::PPIMPORTER_PIXELPOST_OPTIONS);
         }
-        $settings = $this->getPixelpostSettings();
+        $settings = $this->get_pixelpost_settings();
         if (isset($_POST[self::PPIMPORTER_PIXELPOST_SUBMIT])) {
             unset($_POST[self::PPIMPORTER_PIXELPOST_SUBMIT]);
             foreach ($_POST as $name => $setting) {
@@ -226,7 +227,7 @@ class PP_Import extends WP_Importer {
     
     function init()
     {
-        $settings = $this->getPixelpostSettings();
+        $settings = $this->get_pixelpost_settings();
         $this->ppdb = new wpdb(
             $settings['dbuser'],
             $settings['dbpass'],
@@ -242,7 +243,7 @@ class PP_Import extends WP_Importer {
         $this->imgSize = $settings['imageSize'];
     }
 
-    function getPPDB()
+    function get_pp_db()
     {
         if (!isset($this->ppdb)) $this->init();
         return $this->ppdb;
@@ -250,19 +251,19 @@ class PP_Import extends WP_Importer {
 
     function get_pp_config()
     {
-        $ppdb = $this->getPPDB();
+        $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT * FROM {$this->prefix}config", ARRAY_A);
     }
     
     function get_pp_cats()
     {
-        $ppdb = $this->getPPDB();
+        $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT id, name FROM {$this->prefix}categories", ARRAY_A);
     }
     
     function get_pp_postcat($postId)
     {
-        $ppdb = $this->getPPDB();
+        $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT cat.name 
                                     FROM {$this->prefix}pixelpost p
                                         INNER JOIN {$this->prefix}categories cat ON cat.id = p.category
@@ -272,7 +273,7 @@ class PP_Import extends WP_Importer {
     
     function get_pp_postcats($postId)
     {
-        $ppdb = $this->getPPDB();
+        $ppdb = $this->get_pp_db();
         $res = $ppdb->get_results("SELECT ca.cat_id
                                    FROM {$this->prefix}catassoc ca
                                     INNER JOIN {$this->prefix}categories c ON c.id = ca.cat_id
@@ -287,7 +288,7 @@ class PP_Import extends WP_Importer {
     
     function get_pp_post_ids()
     {
-        $ppdb = $this->getPPDB();
+        $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT id FROM {$this->prefix}pixelpost
                                     ",
 //                                     WHERE id=16
@@ -298,7 +299,7 @@ class PP_Import extends WP_Importer {
 
     function get_pp_posts()
     {
-        $ppdb = $this->getPPDB();
+        $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT 
                                         id,
                                         datetime,
@@ -314,7 +315,7 @@ class PP_Import extends WP_Importer {
     
     function get_pp_post_comment_count($postId)
     {
-        $ppdb = $this->getPPDB();
+        $ppdb = $this->get_pp_db();
         $ret = $ppdb->get_results("SELECT count(id) as 'comments_count' FROM {$this->prefix}comments WHERE parent_id = '$postId'", ARRAY_A);
         if (is_array($ret)) {
             return $ret[0]['comments_count'];
@@ -325,7 +326,7 @@ class PP_Import extends WP_Importer {
     
     function get_pp_comment_by_post_id($postId)
     {
-        $ppdb = $this->getPPDB();
+        $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT
                                         id,
                                         parent_id,
@@ -344,7 +345,7 @@ class PP_Import extends WP_Importer {
 
     function get_pp_comments()
     {
-        $ppdb = $this->getPPDB();
+        $ppdb = $this->get_pp_db();
         return $ppdb->get_results("SELECT
                                         id,
                                         parent_id,
@@ -358,7 +359,7 @@ class PP_Import extends WP_Importer {
                                     ARRAY_A);
     }
     
-    function buildCategoryTree($categories)
+    function build_category_tree($categories)
     {
         global $wpdb;
         $tree = array();
@@ -386,7 +387,7 @@ class PP_Import extends WP_Importer {
         return $tree;
     }
 
-    function insertCategoryTree($ppCatTree, $parentWpCatId = null)
+    function insert_category_tree($ppCatTree, $parentWpCatId = null)
     {
         $ppcat2wpcat = array();
         foreach ($ppCatTree as $name => $ppCat) {
@@ -407,7 +408,7 @@ class PP_Import extends WP_Importer {
                 $ppcat2wpcat[$ppCat['id']] = $wpCatId;
             }
             if (!$ppCat['leaf']) {
-                $ppcat2wpcat = $this->insertCategoryTree($ppCat['sub'], $wpCatId) + $ppcat2wpcat;
+                $ppcat2wpcat = $this->insert_category_tree($ppCat['sub'], $wpCatId) + $ppcat2wpcat;
             }
         }
         return $ppcat2wpcat;
@@ -421,8 +422,8 @@ class PP_Import extends WP_Importer {
         $txpcat2wpcat   = array();
 
         if (is_array($categories)) {
-            $catTree = $this->buildCategoryTree($categories);
-            $ppcat2wpcat = $this->insertCategoryTree($catTree);
+            $catTree = $this->build_category_tree($categories);
+            $ppcat2wpcat = $this->insert_category_tree($catTree);
 
             // $tmpPpCats = $this->get_pp_cats();
             // $ppCat = array();
@@ -467,7 +468,7 @@ class PP_Import extends WP_Importer {
             }
 
             // let's insert the new post
-            $wpPostParams = array(
+            $wp_post_params = array(
                 'comment_status' => 'open',
                 'ping_status'    => 'open',
                 'post_author'    => $authorid,
@@ -478,13 +479,13 @@ class PP_Import extends WP_Importer {
                 'post_title'     => utf8_decode($ppPost['headline']),
                 'post_category'  => $wpCategories,
             );
-            $wpPostId = wp_insert_post($wpPostParams, true);
+            $wpPostId = wp_insert_post($wp_post_params, true);
 
             // download the post image (! may be troublesome on certain platforms!)
-            $ppImageUrl     = str_replace(' ', '%20', $this->ppurl . '/images/' . $ppPost['image']);
-            $ppImageTmpFile = $this->tmpDir . '/' . $ppPost['image'];
+            $pp_image_url      = str_replace(' ', '%20', $this->ppurl . '/images/' . $ppPost['image']);
+            $pp_image_tmp_file = $this->tmpDir . '/' . $ppPost['image'];
             
-            $response = wp_remote_get($ppImageUrl, array('timeout' => 300, 'stream' => true, 'filename' => $ppImageTmpFile));
+            $response = wp_remote_get($pp_image_url, array('timeout' => 300, 'stream' => true, 'filename' => $pp_image_tmp_file));
             if (is_wp_error($response)) {
                 var_dump($response);
                 unlink($tmpfname);
@@ -492,21 +493,21 @@ class PP_Import extends WP_Importer {
             }
             
             // Set variables for storage & fix file filename for query strings
-            $fileArray = array(
-                'name'     => basename($ppImageTmpFile),
-                'tmp_name' => $ppImageTmpFile,
+            $file_array = array(
+                'name'     => basename($pp_image_tmp_file),
+                'tmp_name' => $pp_image_tmp_file,
             );
 
             // do the validation and storage stuff, note that the tmp file is moved, no need for unlink
-            $wpPostImgId = media_handle_sideload($fileArray, $wpPostId, $wpPostParams['post_title']);
+            $wpPostImgId = media_handle_sideload($file_array, $wpPostId, $wp_post_params['post_title']);
 
             // update the newly inserted post with a link and a post to the image
             $img = wp_get_attachment_image($wpPostImgId, $this->imgSize);
             $url = '<a href ="' . wp_get_attachment_url($wpPostImgId) . '">' . $img . '</a>';
             // Update the post into the database
-            $wpPostParams['ID'] = $wpPostId;
-            $wpPostParams['post_content'] = $url . PHP_EOL . PHP_EOL . utf8_decode($ppPost['body']);
-            wp_update_post($wpPostParams);
+            $wp_post_params['ID'] = $wpPostId;
+            $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . utf8_decode($ppPost['body']);
+            wp_update_post($wp_post_params);
 
             // set post format to image
             set_post_format($wpPostId, 'image');
@@ -530,14 +531,14 @@ class PP_Import extends WP_Importer {
             }
 
             // keep a reference to this post
-            $ppPosts2wpPosts[$ppPost['id']] = $wpPostId;
+            $pp_posts2wp_posts[$ppPost['id']] = $wpPostId;
         }
         set_time_limit(30);
 
         // Store ID translation for later use
-        update_option('ppPosts2wpPosts', $ppPosts2wpPosts);
+        update_option('pp_posts2wp_posts', $pp_posts2wp_posts);
         
-        echo '<p>'.sprintf(__('Done! <strong>%1$s</strong> posts imported.'), count($ppPosts2wpPosts)).'<br /><br /></p>';
+        echo '<p>'.sprintf(__('Done! <strong>%1$s</strong> posts imported.'), count($pp_posts2wp_posts)).'<br /><br /></p>';
         return true;    
     }
         
