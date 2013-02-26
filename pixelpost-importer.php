@@ -324,7 +324,7 @@ class PP_Import extends WP_Importer {
         return $pp_cat2wpcat;
     }
     
-    function pp_cats2wp_cats($categories) {
+    function pp_cats2wp_cats() {
         $pp_cats = $this->get_pp_cats();
         $pp_cat_tree = $this->build_category_tree($pp_cats);
         $pp_cats2wp_cats = $this->insert_category_tree($pp_cat_tree);
@@ -454,7 +454,7 @@ class PP_Import extends WP_Importer {
     }
         
     function import_categories() {
-        $n_cats = $this->pp_cats2wp_cats($pp_cats);
+        $n_cats = $this->pp_cats2wp_cats();
         echo '<p>'.sprintf(__('Done! <strong>%1$s</strong> categories imported.'), $n_cats).'<br /><br /></p>';
     }
     
