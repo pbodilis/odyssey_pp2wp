@@ -64,7 +64,12 @@ class PP_Import extends WP_Importer {
     const PPIMPORTER_PIXELPOST_SUBMIT  = 'pp2wp_pixelpost_importer_submit';
     const PPIMPORTER_PIXELPOST_RESET   = 'pp2wp_pixelpost_importer_reset';
    
-    
+    private $ppdbh;
+    private $prefix;
+    private $ppurl;
+    private $tmp_dir;
+    private $img_size;
+
     function header() {
         echo '<div class="wrap">';
         echo '<div id="icon-tools" class="icon32"><br></div>' . PHP_EOL;
@@ -154,14 +159,15 @@ class PP_Import extends WP_Importer {
     
     function init() {
         $settings = $this->get_pixelpost_settings();
-        $this->ppdb = new wpdb(
-            $settings['dbuser'],
-            $settings['dbpass'],
-            $settings['dbname'],
-            $settings['dbhost']
-        );
-        $this->ppdb->show_errors();
-        set_magic_quotes_runtime(0);
+
+        $dsn = 'mysql:host=' . $settings['dbhost'] . ';dbname=' . $settings['dbname'];
+        $username = $settings['dbuser'];
+        $password = $settings['dbpass'];
+//         $options = array(
+//             PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES latin1',
+//         );
+
+        $this->ppdbh = new PDO($dsn, $username, $password);
 
         $this->prefix   = $settings['dbpre'];
         $this->ppurl    = $settings['ppurl'];
@@ -169,32 +175,20 @@ class PP_Import extends WP_Importer {
         $this->img_size = $settings['image_size'];
     }
 
-    function get_pp_db() {
-        if ( ! isset($this->ppdb)) $this->init();
-        return $this->ppdb;
+    function get_pp_dbh() {
+        if (!isset($this->ppdbh)) $this->init();
+        return $this->ppdbh;
     }
 
     function get_pp_cats() {
-        $ppdb = $this->get_pp_db();
-        return $ppdb->get_results("SELECT id, name FROM {$this->prefix}categories", ARRAY_A);
-    }
-    
-    function get_pp_postcat( $post_id ) {
-        $ppdb = $this->get_pp_db();
-        return $ppdb->get_results("SELECT cat.name 
-                                    FROM {$this->prefix}pixelpost p
-                                        INNER JOIN {$this->prefix}categories cat ON cat.id = p.category
-                                    WHERE p.id = $post_id",
-                                    ARRAY_A);
+        return $this->get_pp_dbh()->query("SELECT id, name FROM {$this->prefix}categories");
     }
     
     function get_pp_postcats( $post_id ) {
-        $ppdb = $this->get_pp_db();
-        $res = $ppdb->get_results("SELECT ca.cat_id
-                                   FROM {$this->prefix}catassoc ca
-                                    INNER JOIN {$this->prefix}categories c ON c.id = ca.cat_id
-                                   WHERE ca.image_id = $post_id",
-                                 ARRAY_A);
+        $res = $this->get_pp_dbh()->query("SELECT ca.cat_id
+                            FROM {$this->prefix}catassoc ca
+                                INNER JOIN {$this->prefix}categories c ON c.id = ca.cat_id
+                            WHERE ca.image_id = $post_id");
         $ret = array();
         foreach ($res as $r) {
              $ret[] = intval($r['cat_id']);
@@ -203,8 +197,7 @@ class PP_Import extends WP_Importer {
     }
     
     function get_pp_post_ids() {
-        $ppdb = $this->get_pp_db();
-        $pp_ids = $ppdb->get_results("SELECT id FROM {$this->prefix}pixelpost", ARRAY_A);
+        $pp_ids = $this->get_pp_dbh()->query("SELECT id FROM {$this->prefix}pixelpost");
         $ret = array();
         foreach($pp_ids as $pp_id) {
             $ret[] = $pp_id['id'];
@@ -213,8 +206,8 @@ class PP_Import extends WP_Importer {
     }
 
     function get_pp_post_count() {
-        $ppdb = $this->get_pp_db();
-        $ret = $ppdb->get_results("SELECT count(id) as 'post_count' FROM {$this->prefix}pixelpost", ARRAY_A);
+        $res_pdo = $this->get_pp_dbh()->query("SELECT count(id) as 'post_count' FROM {$this->prefix}pixelpost");
+        $ret = $res_pdo->fetchAll();
         if (is_array($ret)) {
             return $ret[0]['post_count'];
         } else {
@@ -223,30 +216,28 @@ class PP_Import extends WP_Importer {
     }
 
     function get_pp_post_by_post_id($post_id) {
-        $ppdb = $this->get_pp_db();
-        $ret = $ppdb->get_results("SELECT id, datetime, headline, body, image
-                                    FROM {$this->prefix}pixelpost
-                                    WHERE id = '$post_id'", ARRAY_A);
-        if (is_array($ret)) {
-            return $ret[0];
-        } else {
-            return 0;
+        $pp_posts = $this->get_pp_dbh()->query("SELECT id, datetime, headline, body, image
+                            FROM {$this->prefix}pixelpost
+                            WHERE id = '$post_id'");
+        $ret = array();
+        foreach($pp_posts as $pp_post) {
+            $ret[] = $pp_post;
         }
+        return $ret;
     }
 
     function get_pp_posts($min_pp_post_id) {
-        $ppdb = $this->get_pp_db();
+        $dbh = $this->get_pp_dbh();
         $query = "SELECT id, datetime, headline, body, image
                  FROM {$this->prefix}pixelpost";
         if (false !== $min_pp_post_id) {
             $query .= " WHERE id>'$min_pp_post_id'";
         }
-        return $ppdb->get_results($query, ARRAY_A);
+        return $dbh->query($query);
     }
     
     function get_pp_post_comment_count( $post_id ) {
-        $ppdb = $this->get_pp_db();
-        $ret = $ppdb->get_results("SELECT count(id) as 'comments_count' FROM {$this->prefix}comments WHERE parent_id = '$post_id'", ARRAY_A);
+        $ret = $this->get_pp_dbh()->query("SELECT count(id) as 'comments_count' FROM {$this->prefix}comments WHERE parent_id = '$post_id'");
         if (is_array($ret)) {
             return $ret[0]['comments_count'];
         } else {
@@ -254,27 +245,18 @@ class PP_Import extends WP_Importer {
         }
     }
     
-    function get_pp_comment_by_post_id( $post_id ) {
-        $ppdb = $this->get_pp_db();
-        return $ppdb->get_results("SELECT id, parent_id, datetime, ip, message, name, url, email
-                                    FROM {$this->prefix}comments
-                                    WHERE parent_id = '$post_id'
-                                      AND publish = 'yes'
-                                    ORDER BY datetime ASC",
-                                    ARRAY_A);
+    function get_pp_comments_by_post_id( $post_id ) {
+        return $this->get_pp_dbh()->query("SELECT id, parent_id, datetime, ip, message, name, url, email
+                            FROM {$this->prefix}comments
+                            WHERE parent_id = '$post_id'
+                                AND publish = 'yes'
+                            ORDER BY datetime ASC");
     }
 
-    function get_pp_comments() {
-        $ppdb = $this->get_pp_db();
-        return $ppdb->get_results("SELECT id, parent_id, datetime, ip, message, name, url, email
-                                    FROM {$this->prefix}comments",
-                                    ARRAY_A);
-    }
-    
     function build_category_tree( $categories ) {
         global $wpdb;
         $tree = array();
-        foreach ( $categories as $category ) {
+        foreach( $categories as $category ) {
             $path = explode('/', $category['name']);
             $last = end($path);
             reset($path);
@@ -347,13 +329,12 @@ class PP_Import extends WP_Importer {
         global $wpdb;
         
         $pp_cats2wp_cats   = get_option('pp_cats2wp_cats');
-
-        $pp_posts2wp_posts = array();
+        $pp_posts2wp_posts = get_option('pp_posts2wp_posts', array());
 
         $pp2wp_post_last_migrated_pp_id = get_option('pp2wp_post_last_migrated_pp_id');
         $pp_posts       = $this->get_pp_posts($pp2wp_post_last_migrated_pp_id);
-        $pp_posts_count = count($pp_posts);
-
+//         $pp_posts       = $this->get_pp_post_by_post_id(647);
+        $pp_posts_count = $this->get_pp_post_count();
         // Let's assume the logged in user in the author of all imported posts
         $authorid = get_current_user_id();
 
@@ -371,7 +352,7 @@ class PP_Import extends WP_Importer {
             $pp_categories = $this->get_pp_postcats($pp_post['id']);
             $wp_categories = array();
             foreach ($pp_categories as $pp_category) {
-                $wp_categories[] = $pp_cats2wp_cats[$pp_category];
+                $wp_categories[] = $pp_cats2wp_cats[ $pp_category ];
             }
 
             // let's insert the new post
@@ -383,7 +364,7 @@ class PP_Import extends WP_Importer {
                 'post_modified'  => $pp_post['datetime'],
                 'post_content'   => '',
                 'post_status'    => 'publish',
-                'post_title'     => utf8_decode($pp_post['headline']),
+                'post_title'     => html_entity_decode(utf8_decode($pp_post['headline'])),
                 'post_category'  => $wp_categories,
             );
             $wp_post_id = wp_insert_post($wp_post_params, true);
@@ -413,28 +394,28 @@ class PP_Import extends WP_Importer {
             $url = '<a href ="' . wp_get_attachment_url($wp_post_img_id) . '">' . $img . '</a>';
             // Update the post into the database
             $wp_post_params['ID'] = $wp_post_id;
-            $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . utf8_decode($pp_post['body']);
+            $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . $pp_post['body'];
             wp_update_post($wp_post_params);
 
             // set post format to image
             set_post_format($wp_post_id, 'image');
             
             // get the comments bound to this post
-            $pp_comments = $this->get_pp_comment_by_post_id($pp_post['id']);
+            $pp_comments = $this->get_pp_comments_by_post_id($pp_post['id']);
             foreach ($pp_comments as $pp_comment) {
-                $wpCommentParams = array(
+                $wp_comment_params = array(
                     'comment_post_ID'      => $wp_post_id,
-                    'comment_author'       => utf8_decode($pp_comment['name']),
+                    'comment_author'       => $pp_comment['name'],
                     'comment_author_email' => $pp_comment['email'],
                     'comment_author_url'   => $pp_comment['url'],
-                    'comment_content'      => html_entity_decode(utf8_decode($pp_comment['message'])),
+                    'comment_content'      => $pp_comment['message'],
                     'user_id'              => $authorid,
                     'comment_author_IP'    => $pp_comment['ip'],
                     'comment_agent'        => 'Import from PP',
                     'comment_date'         => $pp_comment['datetime'],
                     'comment_approved'     => true,
                 );
-                wp_insert_comment($wpCommentParams);
+                wp_insert_comment($wp_comment_params);
             }
 
             // keep a reference to this post
@@ -446,10 +427,11 @@ class PP_Import extends WP_Importer {
             // keep a trace of the last migrated pixelpost post by keeping its id
             update_option('pp2wp_post_last_migrated_pp_id', $pp_post['id']);
             update_option('pp2wp_post_migration_percentage', round(count($pp_posts2wp_posts) * 100.0 / $pp_posts_count, 2));
+var_dump(count($pp_posts2wp_posts)." * 100.0 / $pp_posts_count");
         }
         set_time_limit(30);
 
-        update_option('pp_cats2wp_cats', $pp_posts2wp_posts);
+        update_option('pp_posts2wp_posts', $pp_posts2wp_posts);
         return count($pp_posts2wp_posts);
     }
         
@@ -475,7 +457,7 @@ class PP_Import extends WP_Importer {
     
     function cleanup_ppimport() {
         delete_option('pp_cats2wp_cats');
-        delete_option('pp_posts2wp_posts');
+//         delete_option('pp_posts2wp_posts');
     }
     
     function dispatch() {
