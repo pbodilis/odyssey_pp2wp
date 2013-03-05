@@ -332,8 +332,8 @@ class PP_Import extends WP_Importer {
         $pp_posts2wp_posts = get_option('pp_posts2wp_posts', array());
 
         $pp2wp_post_last_migrated_pp_id = get_option('pp2wp_post_last_migrated_pp_id');
-        $pp_posts       = $this->get_pp_posts($pp2wp_post_last_migrated_pp_id);
-//         $pp_posts       = $this->get_pp_post_by_post_id(647);
+//        $pp_posts       = $this->get_pp_posts($pp2wp_post_last_migrated_pp_id);
+        $pp_posts       = $this->get_pp_post_by_post_id(926);
         $pp_posts_count = $this->get_pp_post_count();
         // Let's assume the logged in user in the author of all imported posts
         $authorid = get_current_user_id();
@@ -364,7 +364,7 @@ class PP_Import extends WP_Importer {
                 'post_modified'  => $pp_post['datetime'],
                 'post_content'   => '',
                 'post_status'    => 'publish',
-                'post_title'     => html_entity_decode(utf8_decode($pp_post['headline'])),
+                'post_title'     => htmlentities($pp_post['headline']),
                 'post_category'  => $wp_categories,
             );
             $wp_post_id = wp_insert_post($wp_post_params, true);
@@ -394,7 +394,7 @@ class PP_Import extends WP_Importer {
             $url = '<a href ="' . wp_get_attachment_url($wp_post_img_id) . '">' . $img . '</a>';
             // Update the post into the database
             $wp_post_params['ID'] = $wp_post_id;
-            $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . $pp_post['body'];
+            $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . htmlentities($pp_post['body']);
             wp_update_post($wp_post_params);
 
             // set post format to image
@@ -408,7 +408,7 @@ class PP_Import extends WP_Importer {
                     'comment_author'       => $pp_comment['name'],
                     'comment_author_email' => $pp_comment['email'],
                     'comment_author_url'   => $pp_comment['url'],
-                    'comment_content'      => $pp_comment['message'],
+                    'comment_content'      => htmlentities($pp_comment['message']),
                     'user_id'              => $authorid,
                     'comment_author_IP'    => $pp_comment['ip'],
                     'comment_agent'        => 'Import from PP',
@@ -427,7 +427,6 @@ class PP_Import extends WP_Importer {
             // keep a trace of the last migrated pixelpost post by keeping its id
             update_option('pp2wp_post_last_migrated_pp_id', $pp_post['id']);
             update_option('pp2wp_post_migration_percentage', round(count($pp_posts2wp_posts) * 100.0 / $pp_posts_count, 2));
-var_dump(count($pp_posts2wp_posts)." * 100.0 / $pp_posts_count");
         }
         set_time_limit(30);
 
