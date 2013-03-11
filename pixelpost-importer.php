@@ -179,6 +179,31 @@ class PP_Import extends WP_Importer {
         if (!isset($this->ppdbh)) $this->init();
         return $this->ppdbh;
     }
+    
+    static function create_pp2wp_table() {
+        global $wpdb;
+        $wpdb->pp2wp = $wpdb->prefix.'pp2wp';
+
+        $charset_collate = '';
+        if($wpdb->supports_collation()) {
+            if(!empty($wpdb->charset)) {
+                $charset_collate = "DEFAULT CHARACTER SET $wpdb->charset";
+            }
+            if(!empty($wpdb->collate)) {
+                $charset_collate .= " COLLATE $wpdb->collate";
+            }
+        }
+        // Create Post Ratings Table
+        $create_pp2wp_sql = "CREATE TABLE $wpdb->pp2wp (".
+                        "pp2wp_id INT(11) NOT NULL auto_increment,".
+                        "pp_post_id INT(11) NOT NULL ,".
+                        "wp_post_id INT(11) NOT NULL ".
+                        "PRIMARY KEY (rating_id)) $charset_collate;";
+//error_log($create_pp2wp_sql);
+
+        require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
+        dbDelta( $create_pp2wp_sql );
+    }
 
     function get_pp_cats() {
         return $this->get_pp_dbh()->query("SELECT id, name FROM {$this->prefix}categories");
@@ -513,3 +538,5 @@ function pixelpost_importer_init() {
     );
 }
 add_action('admin_init', 'pixelpost_importer_init');
+
+register_activation_hook( __FILE__, array( 'PP_Import', 'create_pp2wp_table' ) );
