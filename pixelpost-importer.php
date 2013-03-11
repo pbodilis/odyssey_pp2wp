@@ -60,6 +60,8 @@ if ( ! class_exists( 'WP_Importer')) {
  */
 if ( class_exists( 'WP_Importer' ) ) {
 class PP_Import extends WP_Importer {
+    const PPIMPORTER_PIXELPOST_TO_WORDPRESS_TABLE = 'odyssey_pp2wp';
+
     const PPIMPORTER_PIXELPOST_OPTIONS = 'pp2wp_pixelpost_importer_settings';
     const PPIMPORTER_PIXELPOST_SUBMIT  = 'pp2wp_pixelpost_importer_submit';
     const PPIMPORTER_PIXELPOST_RESET   = 'pp2wp_pixelpost_importer_reset';
@@ -180,12 +182,16 @@ class PP_Import extends WP_Importer {
         return $this->ppdbh;
     }
     
+    /**
+     * Create the correspondance table from pixelpost IDs to wordpress IDs
+     * used by the redirection application.
+     */
     static function create_pp2wp_table() {
         global $wpdb;
-        $wpdb->pp2wp = $wpdb->prefix.'pp2wp';
+        $wpdb->pp2wp = $wpdb->prefix . self::PPIMPORTER_PIXELPOST_TO_WORDPRESS_TABLE;
 
         $charset_collate = '';
-        if($wpdb->supports_collation()) {
+        if($wpdb->has_cap( 'collation' )) {
             if(!empty($wpdb->charset)) {
                 $charset_collate = "DEFAULT CHARACTER SET $wpdb->charset";
             }
@@ -195,14 +201,43 @@ class PP_Import extends WP_Importer {
         }
         // Create Post Ratings Table
         $create_pp2wp_sql = "CREATE TABLE $wpdb->pp2wp (".
-                        "pp2wp_id INT(11) NOT NULL auto_increment,".
                         "pp_post_id INT(11) NOT NULL ,".
-                        "wp_post_id INT(11) NOT NULL ".
-                        "PRIMARY KEY (rating_id)) $charset_collate;";
-//error_log($create_pp2wp_sql);
+                        "wp_post_id INT(11) NOT NULL ,".
+                        "PRIMARY KEY (pp_post_id)) $charset_collate;";
 
         require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
         dbDelta( $create_pp2wp_sql );
+    }
+
+    /**
+     * Insert an entry into the pp2wp table
+     */
+    function insert_pp2wp($pp_post_id, $wp_post_id) {
+        global $wpdb;
+        $wpdb->pp2wp = $wpdb->prefix . self::PPIMPORTER_PIXELPOST_TO_WORDPRESS_TABLE;
+
+        $wpdb->insert(
+            $wpdb->pp2wp,
+            array(
+                'pp_post_id' => $pp_post_id,
+                'wp_post_id' => $wp_post_id,
+            ),
+            array(
+                '%d',
+                '%d',
+            )
+        );
+    }
+
+    /**
+     * Insert an entry into the pp2wp table
+     */
+    function get_pp2wp_wp_post_id($pp_post_id) {
+        global $wpdb;
+        $wpdb->pp2wp = $wpdb->prefix . self::PPIMPORTER_PIXELPOST_TO_WORDPRESS_TABLE;
+
+        $row = $wpdb->get_row("SELECT * FROM $wpdb->pp2wp WHERE pp_post_id = $pp_post_id", ARRAY_A);
+        return is_null($row) ? false : $row['wp_post_id'];
     }
 
     function get_pp_cats() {
@@ -251,13 +286,10 @@ class PP_Import extends WP_Importer {
         return $ret;
     }
 
-    function get_pp_posts($min_pp_post_id) {
+    function get_pp_posts() {
         $dbh = $this->get_pp_dbh();
         $query = "SELECT id, datetime, headline, body, image
                  FROM {$this->prefix}pixelpost";
-        if (false !== $min_pp_post_id) {
-            $query .= " WHERE id>'$min_pp_post_id'";
-        }
         return $dbh->query($query);
     }
     
@@ -354,12 +386,12 @@ class PP_Import extends WP_Importer {
         global $wpdb;
         
         $pp_cats2wp_cats   = get_option('pp_cats2wp_cats');
-        $pp_posts2wp_posts = get_option('pp_posts2wp_posts', array());
+//         $pp_posts2wp_posts = get_option('pp_posts2wp_posts', array());
 
-        $pp2wp_post_last_migrated_pp_id = get_option('pp2wp_post_last_migrated_pp_id');
-       $pp_posts       = $this->get_pp_posts($pp2wp_post_last_migrated_pp_id);
+        $pp_posts       = $this->get_pp_posts();
 //         $pp_posts       = $this->get_pp_post_by_post_id(272);
         $pp_posts_count = $this->get_pp_post_count();
+        $current_pp_index = 0;
         // Let's assume the logged in user in the author of all imported posts
         $authorid = get_current_user_id();
 
@@ -371,6 +403,10 @@ class PP_Import extends WP_Importer {
             // $pp2wp_post_migration_stop = get_option('pp2wp_post_migration_stop');
             if ('false' !== $pp2wp_post_migration_stop) {
                 break;
+            }
+
+            if (false !== $this->get_pp2wp_wp_post_id($pp_post['id'])) { // already in the correspondance table, skip this entry
+                continue;
             }
             
             // retrieve this post categories ID
@@ -436,7 +472,7 @@ class PP_Import extends WP_Importer {
                     'comment_content'      => htmlspecialchars_decode($pp_comment['message']),
                     'user_id'              => $authorid,
                     'comment_author_IP'    => $pp_comment['ip'],
-                    'comment_agent'        => 'Import from PP',
+                    'comment_agent'        => 'PP Importer',
                     'comment_date'         => $pp_comment['datetime'],
                     'comment_approved'     => true,
                 );
@@ -444,14 +480,13 @@ class PP_Import extends WP_Importer {
             }
 
             // keep a reference to this post
-            $pp_posts2wp_posts[ $pp_post['id'] ] = $wp_post_id;
-            
+//             $pp_posts2wp_posts[ $pp_post['id'] ] = $wp_post_id;
+
             // Store ID translation for later use
-//            update_option('pp2wp_pp_post2wp_post_' . $pp_post['id'], $wp_post_id);
+            $this->insert_pp2wp($pp_post['id'], $wp_post_id);
 
             // keep a trace of the last migrated pixelpost post by keeping its id
-            update_option('pp2wp_post_last_migrated_pp_id', $pp_post['id']);
-            update_option('pp2wp_post_migration_percentage', round(count($pp_posts2wp_posts) * 100.0 / $pp_posts_count, 2));
+            update_option('pp2wp_post_migration_percentage', round((++$current_pp_index) * 100.0 / $pp_posts_count, 2));
         }
         set_time_limit(30);
 
@@ -474,14 +509,14 @@ class PP_Import extends WP_Importer {
         echo '</p>';
 
         update_option('pp2wp_post_migration_stop', 'false');
-        delete_option('pp2wp_post_last_migrated_pp_id');
+//         delete_option('pp2wp_post_last_migrated_pp_id');
+        delete_option('pp_posts2wp_posts');
 //         $this->posts2wp($posts);
 
     }
     
     function cleanup_ppimport() {
         delete_option('pp_cats2wp_cats');
-//         delete_option('pp_posts2wp_posts');
     }
     
     function dispatch() {
