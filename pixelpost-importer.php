@@ -458,6 +458,9 @@ class PP_Import extends WP_Importer {
             $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . htmlspecialchars_decode($pp_post['body']);
             wp_update_post($wp_post_params);
 
+            // mark the attached image as this post thumbnail
+            update_post_meta( $wp_post_id, '_thumbnail_id', $wp_post_img_id );
+
             // set post format to image
             set_post_format($wp_post_id, 'image');
             
