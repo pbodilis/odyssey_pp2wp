@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: Pixelpost Importer
-Plugin URI: http://rataki.eu
+Plugin URI: https://github.com/pbodilis/
 Description: Import posts, comments, and categories from a Pixelpost database.
 Author: Pierre Bodilis
 Author URI: http://rataki.eu/
@@ -29,13 +29,7 @@ function pp2wp_post_migration_resume_callback() {
     die();
 }
 add_action('wp_ajax_pp2wp_post_migration_resume', 'pp2wp_post_migration_resume_callback');
-
-function pp2wp_post_migration_start_callback() {
-    echo json_encode($GLOBALS['pp_import']->pp_posts2wp_posts());
-    die();
-}
-add_action('wp_ajax_pp2wp_post_migration_start', 'pp2wp_post_migration_start_callback');
-
+add_action('wp_ajax_pp2wp_post_migration_start', 'pp2wp_post_migration_resume_callback');
 
 // let's comment this, as the ajax callbacks needs it (wp_ajax_pp2wp_post_migration_start & wp_ajax_pp2wp_post_migration_resume)
 // if ( ! defined('WP_LOAD_IMPORTERS'))
@@ -230,7 +224,7 @@ class PP_Import extends WP_Importer {
     }
 
     /**
-     * Insert an entry into the pp2wp table
+     * gets the wp post id bound to a pp post id.
      */
     function get_pp2wp_wp_post_id($pp_post_id) {
         global $wpdb;
@@ -386,12 +380,11 @@ class PP_Import extends WP_Importer {
         global $wpdb;
         
         $pp_cats2wp_cats   = get_option('pp_cats2wp_cats');
-//         $pp_posts2wp_posts = get_option('pp_posts2wp_posts', array());
 
         $pp_posts       = $this->get_pp_posts();
 //         $pp_posts       = $this->get_pp_post_by_post_id(272);
         $pp_posts_count = $this->get_pp_post_count();
-        $current_pp_index = 0;
+        $count = 0;
         // Let's assume the logged in user in the author of all imported posts
         $authorid = get_current_user_id();
 
@@ -482,19 +475,15 @@ class PP_Import extends WP_Importer {
                 wp_insert_comment($wp_comment_params);
             }
 
-            // keep a reference to this post
-//             $pp_posts2wp_posts[ $pp_post['id'] ] = $wp_post_id;
-
             // Store ID translation for later use
             $this->insert_pp2wp($pp_post['id'], $wp_post_id);
 
             // keep a trace of the last migrated pixelpost post by keeping its id
-            update_option('pp2wp_post_migration_percentage', round((++$current_pp_index) * 100.0 / $pp_posts_count, 2));
+            update_option('pp2wp_post_migration_percentage', round((++$count) * 100.0 / $pp_posts_count, 2));
         }
         set_time_limit(30);
 
-        update_option('pp_posts2wp_posts', $pp_posts2wp_posts);
-        return count($pp_posts2wp_posts);
+        return $count;
     }
         
     function import_categories() {
@@ -512,10 +501,6 @@ class PP_Import extends WP_Importer {
         echo '</p>';
 
         update_option('pp2wp_post_migration_stop', 'false');
-//         delete_option('pp2wp_post_last_migrated_pp_id');
-        delete_option('pp_posts2wp_posts');
-//         $this->posts2wp($posts);
-
     }
     
     function cleanup_ppimport() {
