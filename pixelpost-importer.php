@@ -25,7 +25,7 @@ add_action('wp_ajax_pp2wp_post_migration_stop', 'pp2wp_post_migration_stop_callb
 
 function pp2wp_post_migration_resume_callback() {
     update_option('pp2wp_post_migration_stop', 'false');
-    echo json_encode($GLOBALS['pp_import']->pp_posts2wp_posts());
+    echo json_encode($GLOBALS['PP_Importer']->pp_posts2wp_posts());
     die();
 }
 add_action('wp_ajax_pp2wp_post_migration_resume', 'pp2wp_post_migration_resume_callback');
@@ -53,23 +53,30 @@ if ( ! class_exists( 'WP_Importer')) {
  * @subpackage Importer
  */
 if ( class_exists( 'WP_Importer' ) ) {
-class PP_Import extends WP_Importer {
+class PP_Importer extends WP_Importer {
     const PPIMPORTER_PIXELPOST_TO_WORDPRESS_TABLE = 'odyssey_pp2wp';
 
-    const PPIMPORTER_PIXELPOST_OPTIONS = 'pp2wp_pixelpost_importer_settings';
     const PPIMPORTER_PIXELPOST_SUBMIT  = 'pp2wp_pixelpost_importer_submit';
     const PPIMPORTER_PIXELPOST_RESET   = 'pp2wp_pixelpost_importer_reset';
    
-    private $ppdbh;
-    private $prefix;
-    private $ppurl;
-    private $tmp_dir;
-    private $img_size;
+    protected $ppdbh;
+    protected $prefix;
+    protected $ppurl;
+    protected $tmp_dir;
+    protected $img_size;
+    
+    function get_title() {
+        return __('Import Pixelpost');
+    }
+
+    function get_slug() {
+        return 'pixelpost';
+    }
 
     function header() {
         echo '<div class="wrap">';
         echo '<div id="icon-tools" class="icon32"><br></div>' . PHP_EOL;
-        echo '<h2>'.__('Import Pixelpost').'</h2>';
+        echo '<h2>' . $this->get_title() . '</h2>';
     }
 
     function footer() {
@@ -91,14 +98,19 @@ class PP_Import extends WP_Importer {
             'image_size'    => 'full',
         );
     }
-    function get_pixelpost_settings() {
-        return get_option(self::PPIMPORTER_PIXELPOST_OPTIONS, $this->get_pixelpost_default_settings());
+
+    function get_option_name() {
+        return 'pp2wp_pixelpost_importer_settings';
     }
 
-    static function setting2Type($s) {
+    function get_pixelpost_settings() {
+        return get_option($this->get_option_name(), $this->get_pixelpost_default_settings());
+    }
+
+    function setting2Type($s) {
         return ($s == 'dbpass') ? 'password' : 'text';
     }
-    static function setting2Label($s) {
+    function setting2Label($s) {
          $s2l = array(
             'dbuser'        => __('Pixelpost Database User:'),
             'dbpass'        => __('Pixelpost Database Password:'),
@@ -112,9 +124,15 @@ class PP_Import extends WP_Importer {
         return $s2l[$s];
     }
 
+
+    function description() {
+        echo '<p>' . __( 'This importer allows you to extract posts from a Pixelpost install into wordpress.' ) . '</p>';
+        echo '<p>' . __( 'Please note that this improter has been developped for pixelpost 1.7.1 and wordpress 3.5.1. It may not work very well with other versions.' ) . '</p>';
+    }
+
     function greet() {
         if ( isset( $_POST[self::PPIMPORTER_PIXELPOST_RESET] ) ) {
-            delete_option(self::PPIMPORTER_PIXELPOST_OPTIONS);
+            delete_option($this->get_option_name());
         }
         $settings = $this->get_pixelpost_settings();
         if ( isset( $_POST[ self::PPIMPORTER_PIXELPOST_SUBMIT ] ) ) {
@@ -122,25 +140,24 @@ class PP_Import extends WP_Importer {
             foreach ( $_POST as $name => $setting ) {
                 $settings[$name] = $setting;
             }
-            update_option(self::PPIMPORTER_PIXELPOST_OPTIONS, $settings);
+            update_option($this->get_option_name(), $settings);
         }
 
-        echo '<p>' . __( 'This importer allows you to extract posts from a Pixelpost install into wordpress.' ) . '</p>';
-        echo '<p>' . __( 'Please note that this improter has been developped for pixelpost 1.7.1 and wordpress 3.5.1. It may not work very well with other versions.' ) . '</p>';
+        $this->description();
         echo '<p>' . __( 'Your Pixelpost configuration settings are as follows:' ) . '</p>';
 
-        echo '<form action="admin.php?import=pixelpost&amp;step=1" method="post">';
+        echo '<form action="admin.php?import=' . $this->get_slug() . '&amp;step=0" method="post">';
         echo '  <table class="form-table">';
         echo '    <tbody>';
         foreach ($settings as $name => &$setting) {
             echo '      <tr valign="top">';
             echo '        <th scope="row">';
             echo '          <label for="' . $name . '" name="' . $name . '" style="width: 300px; display: inline-block;">';
-            echo             self::setting2Label($name);
+            echo             $this->setting2Label($name);
             echo '          </label>';
             echo '        </th>';
             echo '        <td>';
-            echo '          <input id="' . $name . '" name="' . $name . '" type="' . self::setting2Type($name) . '" value="' . $setting . '"  size="60" />';
+            echo '          <input id="' . $name . '" name="' . $name . '" type="' . $this->setting2Type($name) . '" value="' . $setting . '"  size="60" />';
             echo '        </td>';
             echo '      </tr>';
         }
@@ -510,13 +527,7 @@ class PP_Import extends WP_Importer {
     function dispatch() {
         $this->header();
 
-        if (isset ( $_POST[ self::PPIMPORTER_PIXELPOST_SUBMIT ] ) ||
-            isset ( $_POST[ self::PPIMPORTER_PIXELPOST_RESET ] )  ||
-            empty ( $_GET['step'] ) ) {
-            $step = 0;
-        } else {
-            $step = intval ( $_GET ['step']);
-        }
+        $step = intval ( $_GET ['step']);
 
         switch ( $step ) {
             default:
@@ -533,7 +544,7 @@ class PP_Import extends WP_Importer {
         );
 
         if ( isset ( $step2Str[ $step ] ) ) {
-            echo '<form action="admin.php?import=pixelpost&amp;step=' . ($step + 1) . '" method="post">';
+            echo '<form action="admin.php?import=' . $this->get_slug() . '&amp;step=' . ($step + 1) . '" method="post">';
             echo '  <input type="submit" name="submit" value="' . $step2Str[$step] . '" class="button button-primary" />';
             echo '</form>';
         }
@@ -552,14 +563,14 @@ function pixelpost_importer_init() {
      * WordPress Importer object for registering the import callback
      * @global WP_Import $wp_import
      */
-    $GLOBALS['pp_import'] = new PP_Import();
+    $GLOBALS['PP_Importer'] = new PP_Importer();
     register_importer(
-        'pixelpost',
+        $GLOBALS['PP_Importer']->get_slug(),
         'PixelPost',
         __('Import <strong>posts, comments, and categories</strong> from a pixelpost installation.', 'pixelpost-importer'),
-        array($GLOBALS['pp_import'], 'dispatch')
+        array($GLOBALS['PP_Importer'], 'dispatch')
     );
 }
 add_action('admin_init', 'pixelpost_importer_init');
 
-register_activation_hook( __FILE__, array( 'PP_Import', 'create_pp2wp_table' ) );
+register_activation_hook( __FILE__, array( 'PP_Importer', 'create_pp2wp_table' ) );
