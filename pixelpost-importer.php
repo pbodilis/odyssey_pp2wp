@@ -381,8 +381,6 @@ class PP_Importer extends WP_Importer {
     function pp_post2wp_post($pp_post_id) {
         global $wpdb;
         
-        $pp_cats2wp_cats   = get_option('pp_cats2wp_cats');
-
         // Let's assume the logged in user in the author of all imported posts
         $authorid = get_current_user_id();
 
@@ -394,9 +392,13 @@ class PP_Importer extends WP_Importer {
         }
 
         // retrieve this post categories ID
+        $pp_cats2wp_cats = get_option('pp_cats2wp_cats');
         $pp_categories = $this->get_pp_postcats($pp_post['id']);
         $wp_categories = array();
         foreach ($pp_categories as $pp_category) {
+            if ( ! isset($pp_cats2wp_cats[ $pp_category ])) {
+                continue;
+            }
             $wp_categories[] = $pp_cats2wp_cats[ $pp_category ];
         }
 
