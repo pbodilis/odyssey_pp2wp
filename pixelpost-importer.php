@@ -11,25 +11,13 @@ License: GPL version 2 or later - http://www.gnu.org/licenses/old-licenses/gpl-2
 */
 
 // first, the ajax calls
-function pp2wp_post_migration_status_callback() {
-    echo get_option('pp2wp_post_migration_percentage', 0);
-    die();
-}
-add_action('wp_ajax_pp2wp_post_migration_status', 'pp2wp_post_migration_status_callback');
+function pp2wp_migrate_callback() {
 
-function pp2wp_post_migration_stop_callback() {
-    update_option('pp2wp_post_migration_stop', 'true');
+    echo json_encode($GLOBALS['PP_Importer']->pp_post2wp_post($_GET['pp_post_id']));
     die();
 }
-add_action('wp_ajax_pp2wp_post_migration_stop', 'pp2wp_post_migration_stop_callback');
+add_action('wp_ajax_pp2wp_migrate', 'pp2wp_migrate_callback');
 
-function pp2wp_post_migration_resume_callback() {
-    update_option('pp2wp_post_migration_stop', 'false');
-    echo json_encode($GLOBALS['PP_Importer']->pp_posts2wp_posts());
-    die();
-}
-add_action('wp_ajax_pp2wp_post_migration_resume', 'pp2wp_post_migration_resume_callback');
-add_action('wp_ajax_pp2wp_post_migration_start', 'pp2wp_post_migration_resume_callback');
 
 // let's comment this, as the ajax callbacks needs it (wp_ajax_pp2wp_post_migration_start & wp_ajax_pp2wp_post_migration_resume)
 // if ( ! defined('WP_LOAD_IMPORTERS'))
@@ -287,14 +275,11 @@ class PP_Importer extends WP_Importer {
     }
 
     function get_pp_post_by_post_id($post_id) {
-        $pp_posts = $this->get_pp_dbh()->query("SELECT id, datetime, headline, body, image
+        $res_pdo = $this->get_pp_dbh()->query("SELECT id, datetime, headline, body, image
                             FROM {$this->prefix}pixelpost
                             WHERE id = '$post_id'");
-        $ret = array();
-        foreach($pp_posts as $pp_post) {
-            $ret[] = $pp_post;
-        }
-        return $ret;
+        $ret = $res_pdo->fetchAll();
+        return $ret[0];
     }
 
     function get_pp_posts() {
@@ -393,114 +378,100 @@ class PP_Importer extends WP_Importer {
         return count($pp_cats2wp_cats);
     }
     
-    function pp_posts2wp_posts() {
+    function pp_post2wp_post($pp_post_id) {
         global $wpdb;
         
         $pp_cats2wp_cats   = get_option('pp_cats2wp_cats');
 
-        $pp_posts       = $this->get_pp_posts();
-//         $pp_posts       = $this->get_pp_post_by_post_id(272);
-        $pp_posts_count = $this->get_pp_post_count();
-        $count = 0;
         // Let's assume the logged in user in the author of all imported posts
         $authorid = get_current_user_id();
 
         set_time_limit(0);
-        foreach ( $pp_posts as $pp_post ) {
-            // all options are cached upon loading, so do here the db query
-            $row = $wpdb->get_row( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", 'pp2wp_post_migration_stop' ) );
-            $pp2wp_post_migration_stop = $row->option_value;
-            // $pp2wp_post_migration_stop = get_option('pp2wp_post_migration_stop');
-            if ('false' !== $pp2wp_post_migration_stop) {
-                break;
-            }
+        $pp_post = $this->get_pp_post_by_post_id($pp_post_id);
 
-            if (false !== $this->get_pp2wp_wp_post_id($pp_post['id'])) { // already in the correspondance table, skip this entry
-                continue;
-            }
-            
-            // retrieve this post categories ID
-            $pp_categories = $this->get_pp_postcats($pp_post['id']);
-            $wp_categories = array();
-            foreach ($pp_categories as $pp_category) {
-                $wp_categories[] = $pp_cats2wp_cats[ $pp_category ];
-            }
-
-            // let's insert the new post
-            $wp_post_params = array(
-                'comment_status' => 'open',
-                'ping_status'    => 'open',
-                'post_author'    => $authorid,
-                'post_date'      => $pp_post['datetime'],
-                'post_modified'  => $pp_post['datetime'],
-                'post_content'   => '',
-                'post_status'    => 'publish',
-                'post_title'     => htmlspecialchars_decode($pp_post['headline']),
-                'post_category'  => $wp_categories,
-            );
-            $wp_post_id = wp_insert_post($wp_post_params, true);
-
-            // download the post image ( !  may be troublesome on certain platforms!)
-            $pp_image_url      = str_replace(' ', '%20', $this->ppurl . '/images/' . $pp_post['image']);
-            $pp_image_tmp_file = $this->tmp_dir . '/' . $pp_post['image'];
-            
-            $response = wp_remote_get($pp_image_url, array('timeout' => 300, 'stream' => true, 'filename' => $pp_image_tmp_file));
-            if (is_wp_error($response)) {
-                var_dump($response);
-                unlink($pp_image_tmp_file);
-                return $response;
-            }
-            
-            // Set variables for storage & fix file filename for query strings
-            $file_array = array(
-                'name'     => basename($pp_image_tmp_file),
-                'tmp_name' => $pp_image_tmp_file,
-            );
-
-            // do the validation and storage stuff, note that the tmp file is moved, no need for unlink
-            $wp_post_img_id = media_handle_sideload($file_array, $wp_post_id, $wp_post_params['post_title']);
-
-            // update the newly inserted post with a link and a post to the image
-            $img = wp_get_attachment_image($wp_post_img_id, $this->img_size);
-            $url = '<a href ="' . wp_get_attachment_url($wp_post_img_id) . '">' . $img . '</a>';
-            // Update the post into the database
-            $wp_post_params['ID'] = $wp_post_id;
-            $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . htmlspecialchars_decode($pp_post['body']);
-            wp_update_post($wp_post_params);
-
-            // mark the attached image as this post thumbnail
-            update_post_meta( $wp_post_id, '_thumbnail_id', $wp_post_img_id );
-
-            // set post format to image
-            set_post_format($wp_post_id, 'image');
-            
-            // get the comments bound to this post
-            $pp_comments = $this->get_pp_comments_by_post_id($pp_post['id']);
-            foreach ($pp_comments as $pp_comment) {
-                $wp_comment_params = array(
-                    'comment_post_ID'      => $wp_post_id,
-                    'comment_author'       => htmlspecialchars_decode($pp_comment['name']),
-                    'comment_author_email' => $pp_comment['email'],
-                    'comment_author_url'   => $pp_comment['url'],
-                    'comment_content'      => htmlspecialchars_decode($pp_comment['message']),
-                    'user_id'              => $authorid,
-                    'comment_author_IP'    => $pp_comment['ip'],
-                    'comment_agent'        => 'PP Importer',
-                    'comment_date'         => $pp_comment['datetime'],
-                    'comment_approved'     => true,
-                );
-                wp_insert_comment($wp_comment_params);
-            }
-
-            // Store ID translation for later use
-            $this->insert_pp2wp($pp_post['id'], $wp_post_id);
-
-            // keep a trace of the last migrated pixelpost post by keeping its id
-            update_option('pp2wp_post_migration_percentage', round((++$count) * 100.0 / $pp_posts_count, 2));
+        if (false !== $this->get_pp2wp_wp_post_id($pp_post['id'])) { // already in the correspondance table, skip this entry
+            return false;
         }
+
+        // retrieve this post categories ID
+        $pp_categories = $this->get_pp_postcats($pp_post['id']);
+        $wp_categories = array();
+        foreach ($pp_categories as $pp_category) {
+            $wp_categories[] = $pp_cats2wp_cats[ $pp_category ];
+        }
+
+        // let's insert the new post
+        $wp_post_params = array(
+            'comment_status' => 'open',
+            'ping_status'    => 'open',
+            'post_author'    => $authorid,
+            'post_date'      => $pp_post['datetime'],
+            'post_modified'  => $pp_post['datetime'],
+            'post_content'   => '',
+            'post_status'    => 'publish',
+            'post_title'     => htmlspecialchars_decode($pp_post['headline']),
+            'post_category'  => $wp_categories,
+        );
+        $wp_post_id = wp_insert_post($wp_post_params, true);
+
+        // download the post image ( !  may be troublesome on certain platforms!)
+        $pp_image_url      = str_replace(' ', '%20', $this->ppurl . '/images/' . $pp_post['image']);
+        $pp_image_tmp_file = $this->tmp_dir . '/' . $pp_post['image'];
+
+        $response = wp_remote_get($pp_image_url, array('timeout' => 300, 'stream' => true, 'filename' => $pp_image_tmp_file));
+        if (is_wp_error($response)) {
+            var_dump($response);
+            unlink($pp_image_tmp_file);
+            return $response;
+        }
+
+        // Set variables for storage & fix file filename for query strings
+        $file_array = array(
+            'name'     => basename($pp_image_tmp_file),
+            'tmp_name' => $pp_image_tmp_file,
+        );
+
+        // do the validation and storage stuff, note that the tmp file is moved, no need for unlink
+        $wp_post_img_id = media_handle_sideload($file_array, $wp_post_id, $wp_post_params['post_title']);
+
+        // update the newly inserted post with a link and a post to the image
+        $img = wp_get_attachment_image($wp_post_img_id, $this->img_size);
+        $url = '<a href ="' . wp_get_attachment_url($wp_post_img_id) . '">' . $img . '</a>';
+        // Update the post into the database
+        $wp_post_params['ID'] = $wp_post_id;
+        $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . htmlspecialchars_decode($pp_post['body']);
+        wp_update_post($wp_post_params);
+
+        // mark the attached image as this post thumbnail
+        update_post_meta( $wp_post_id, '_thumbnail_id', $wp_post_img_id );
+
+        // set post format to image
+        set_post_format($wp_post_id, 'image');
+
+        // get the comments bound to this post
+        $pp_comments = $this->get_pp_comments_by_post_id($pp_post['id']);
+        foreach ($pp_comments as $pp_comment) {
+            $wp_comment_params = array(
+                'comment_post_ID'      => $wp_post_id,
+                'comment_author'       => htmlspecialchars_decode($pp_comment['name']),
+                'comment_author_email' => $pp_comment['email'],
+                'comment_author_url'   => $pp_comment['url'],
+                'comment_content'      => htmlspecialchars_decode($pp_comment['message']),
+                'user_id'              => $authorid,
+                'comment_author_IP'    => $pp_comment['ip'],
+                'comment_agent'        => 'PP Importer',
+                'comment_date'         => $pp_comment['datetime'],
+                'comment_approved'     => true,
+            );
+            wp_insert_comment($wp_comment_params);
+        }
+
+        // Store ID translation for later use
+        $this->insert_pp2wp($pp_post['id'], $wp_post_id);
+
         set_time_limit(30);
 
-        return $count;
+        return $wp_post_id;
     }
         
     function import_categories() {
@@ -510,14 +481,13 @@ class PP_Importer extends WP_Importer {
     
     function import_posts() {
         wp_enqueue_script( 'pixelpost-importer', plugins_url('/pixelpost-importer.js', __FILE__) );
+        wp_localize_script( 'pixelpost-importer', 'pp_post_ids', $this->get_pp_post_ids() );
         echo '<p>' . sprintf(__('Retrieved %d posts from Pixelpost, importing...'), $this->get_pp_post_count()) . '</p>';
         echo '<p id="pp2wp_post_migration_log">'. __('Starting...') . '</p>';
         echo '<p>';
         echo '  <input id="pp2wp_post_migration_stop"   type="submit" name="stop migration"   value="stop migration"   class="button button-primary"/>';
         echo '  <input id="pp2wp_post_migration_resume" type="submit" name="resume migration" value="resume migration" class="button button-primary"/>';
         echo '</p>';
-
-        update_option('pp2wp_post_migration_stop', 'false');
     }
     
     function cleanup_ppimport() {
