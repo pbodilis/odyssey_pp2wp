@@ -441,7 +441,7 @@ class PP_Importer extends WP_Importer {
         $url = '<a href ="' . wp_get_attachment_url($wp_post_img_id) . '">' . $img . '</a>';
         // Update the post into the database
         $wp_post_params['ID'] = $wp_post_id;
-        $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . htmlspecialchars_decode($pp_post['body']);
+        $wp_post_params['post_content'] = $url . PHP_EOL . PHP_EOL . '<!--more-->' . PHP_EOL . PHP_EOL . htmlspecialchars_decode($pp_post['body']);
         wp_update_post($wp_post_params);
 
         // mark the attached image as this post thumbnail
