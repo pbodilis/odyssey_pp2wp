@@ -24,7 +24,7 @@ add_action('wp_ajax_pp2wp_migrate', 'pp2wp_migrate_callback');
 //     return;
 
 /** Display verbose errors */
-define('IMPORT_DEBUG', true);
+// define('IMPORT_DEBUG', true);
 
 // Load Importer API
 require_once ABSPATH . 'wp-admin/includes/import.php';
